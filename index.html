@@ -1,0 +1,38 @@
+﻿<script src="https://unpkg.com/terser@3.8.2/dist/browser.bundle.js"></script>
+
+<h2>Terser-online</h2>
+<input type=checkbox checked> show options
+<br>
+<br>
+<textarea id=input>// input</textarea>
+<textarea id=options>// options
+{
+  // toplevel: true,
+  compress: {
+    passes: 3,
+    // unsafe: true
+    // pure_getters: true
+  },
+}</textarea>
+<textarea id=output>// output</textarea>
+
+<style>
+h2 { margin: 0 }
+textarea { width: 48vw; height: calc(100vh - 100px); margin: 0 1vw 0 0; float: left; }
+#options { display: none; }
+:checked ~ #options { display: block; }
+:checked ~ textarea { width: 31vw; }
+</style>
+
+<script>
+input.value = "// input";
+output.value = "// output";
+onload = function(){
+  oninput = function(){
+    try{eval("opt = " + options.value)} catch(e){ opt = {} }
+    result = Terser.minify(input.value, opt);
+    if(result.error) output.value = "// error\n" + result.error;
+    else output.value = result.code.length ? "// output (" + (result.code.length - 1) + "b)\n" + result.code.slice(0, -1) : "// output";
+  }
+}
+</script>
