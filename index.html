@@ -1,32 +1,34 @@
 ﻿<script src="https://unpkg.com/terser@3.8.2/dist/browser.bundle.js"></script>
 
-<h2>Terser-online (ES6 minifier based on <a href="https://github.com/fabiosantoscode/terser">terser</a>)</h2>
-<input type=checkbox checked> show <a href="https://github.com/fabiosantoscode/terser#compress-options">options</a>
+<h2><a href="https://github.com/fabiosantoscode/terser">Terser</a>-online (ES6 minifier)</h2>
+<input type=checkbox id=check> show <a href="https://github.com/fabiosantoscode/terser#compress-options">options</a>
 <br>
 <br>
-<textarea id=input>// input</textarea>
+<textarea id=input placeholder=input></textarea>
 <textarea id=options>// options
 {
-  // toplevel: true,
+  toplevel: true,
   compress: {
     passes: 3,
-    // unsafe: true
-    // pure_getters: true
+    unsafe: true
+    pure_getters: true
   },
 }</textarea>
-<textarea id=output>// output</textarea>
+<textarea id=output placeholder=output></textarea>
 
 <style>
 h2 { margin: 0 0 5px; }
-textarea { width: 48vw; height: calc(100vh - 100px); margin: 0 1vw 0 0; float: left; }
+body { font-family: arial; }
+textarea { width: 47vw; height: calc(100vh - 100px); margin: 0 1vw 0 0; float: left; }
 #options { display: none; }
 :checked ~ #options { display: block; }
 :checked ~ textarea { width: 31vw; }
 </style>
 
 <script>
-input.value = "// input";
-output.value = "// output";
+check.checked = 0;
+input.value = "";
+output.value = "";
 onload = function(){
   oninput = function(){
     try{eval("opt = " + options.value)} catch(e){ opt = {} }
