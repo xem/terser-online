@@ -1,7 +1,24 @@
-﻿<script src="https://unpkg.com/terser@3.8.2/dist/browser.bundle.js"></script>
+﻿<title>Terser-online</title>
+
+<script src="https://unpkg.com/terser@3.8.2/dist/browser.bundle.js"></script>
+<script src="regpack/contextDescriptor_browser.js"></script>
+<script src="regpack/stringHelper.js"></script>
+<script src="regpack/packerData.js"></script>
+<script src="regpack/shapeShifter.js"></script>
+<script src="regpack/regPack.js"></script>
+<script src="regpack/patternViewer.js"></script>
+<script src="regpack/thermalViewer.js"></script>
 
 <h2><a href="https://github.com/fabiosantoscode/terser">Terser</a>-online (ES6 minifier)</h2>
-<input type=checkbox id=check> show <a href="https://github.com/fabiosantoscode/terser#compress-options">options</a>
+<input type=checkbox id=check> show <a href="https://github.com/fabiosantoscode/terser#compress-options">options</a> 
+
+<span class=pack>
+  <button onclick=output.value=pack(output.value)>RegPack output</button>
+  <input size=2 id=paramOExcludedVars value="a b c">
+  <input size=1 id=paramFGain value="1">
+  <input size=1 id=paramFLength value="0">
+  <input size=1 id=paramFCopies value="0">
+</span>
 <br>
 <br>
 <textarea id=input placeholder=input></textarea>
@@ -20,22 +37,74 @@
 h2 { margin: 0 0 5px; }
 body { font-family: arial; }
 textarea { width: calc(50vw - 25px); height: calc(100vh - 100px); margin: 0 10px 0 0; float: left; }
-textarea ~ textarea { margin: 0 }
+textarea ~ textarea ~ textarea { margin: 0 }
 #options { display: none; }
 :checked ~ #options { display: block; }
 :checked ~ textarea { width: 31vw; }
+.pack { float: right; margin: 0 25px 0 0 }
+input[size="1"] { width: 15px }
 </style>
 
 <script>
 check.checked = 0;
-input.value = "";
-output.value = "";
+//input.value = "";
+//output.value = "";
 onload = function(){
   oninput = function(){
     try{eval("opt = " + options.value)} catch(e){ opt = {} }
     result = Terser.minify("onload = function(){" + input.value + "}", opt);
     if(result.error) output.value = "// error\n" + result.error;
-    else output.value = result.code.length ? "// output (" + (result.code.length - 1) + "b)\n" + result.code.slice(0, -1).replace(/-- >/g, "-->").replace(/onload=function\(\){(var )?(.*)}/,"$2") : "// output";
+    else output.value = result.code.length > 19 ? "// output (" + (result.code.length - 1) + "b)\n" + result.code.slice(0, -1).replace(/-- >/g, "-->").replace(/onload=function\(\){(var )?(.*)}/,"$2") : "";
   }
+}
+
+pack = function(input){
+	
+	// Get rid of comments and empty lines
+	input = input.replace(/([\r\n]|^)\s*\/\/.*|[\r\n]+\s*/g,'');
+	var options = {
+		withMath : false,
+		hash2DContext : true,
+		hashWebGLContext : true,
+		hashAudioContext : true,
+		contextVariableName : "c",
+		contextType : 0,
+		reassignVars : true,
+		varsNotReassigned : document.getElementById("paramOExcludedVars").value,
+		crushGainFactor : parseFloat(document.getElementById("paramFGain").value),
+		crushLengthFactor : parseFloat(document.getElementById("paramFLength").value),
+		crushCopiesFactor : parseFloat(document.getElementById("paramFCopies").value),
+		crushTiebreakerFactor : 1,
+		wrapInSetInterval : false,
+		timeVariableName : "",
+		useES6 : true
+	};
+
+	var originalLength = packer.getByteLength(input);
+	var inputList = packer.runPacker(input, options);
+	var methodCount = inputList.length;
+	var patternViewer = new PatternViewer;
+	var thermalViewer = new ThermalViewer;
+		
+	var bestMethod=0, bestStage=0, bestCompression=1e8;
+	for (var i=0; i<methodCount; ++i) {
+		var packerData = inputList[i];
+    //console.log(packerData);
+		for (var j=0; j<4; ++j) {
+			var output = (j==0 ? packerData.contents : packerData.result[j-1][1]);
+			var packedLength = packer.getByteLength(output);
+      //console.log(packedLength);
+			if (packedLength < bestCompression) {
+				bestCompression = packedLength;
+				bestMethod = i;
+				bestStage = j;
+			} 
+		}
+	} 
+
+	var bestOutput = inputList[bestMethod];
+  //console.log(bestOutput.result[bestStage-1][1]);
+  
+  return "// output(" + bestCompression + "b)\n" + bestOutput.result[bestStage-1][1];
 }
 </script>

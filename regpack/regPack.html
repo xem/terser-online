@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>RegPack v5.0.2</title>
+	<style type="text/css">
+#options {
+  border:1px solid gray;
+  padding:5px;
+}
+
+.best {
+  box-shadow: 0px 0px 12px 1px rgb(0, 192, 0) inset;
+}
+
+b {
+	color: black;
+}
+
+b.bestMessage {
+	text-shadow: 1px 1px 1px rgb(0, 192, 0)
+}
+
+div#output{
+	display:none;
+}
+
+div#thermalColumn{
+	visibility:hidden;
+}
+
+div.dock {
+	display:flex;
+	overflow:hidden;
+}
+
+div.dockControl {
+	height:20px;
+	margin:1px;
+	border:solid #888 1px;
+	box-sizing: border-box;
+	background-image:linear-gradient(#aaa,#ddd,#eee);
+	text-align:center;
+	text-shadow:#fff 1px 1px;
+	color:#444;
+	line-height:19px;
+}
+
+div.dockControl:hover {
+	background-image:linear-gradient(#adf,#def,#eff);
+}
+
+div.dockControl:active {
+	background-image:linear-gradient(#6ce,#bdf,#cef);
+}
+
+div.column {
+	flex:1;
+	height:15em;
+}
+
+div.textBox {
+	width:50%;
+	padding:1px;
+	border:1px solid;
+	border-color:#888 #ccc #ccc #888;
+	margin: 1px 0px 1px 0px;
+	box-sizing: border-box;
+	display:inline-block;
+	vertical-align: top;
+	min-height:8em;
+}
+
+
+div#thermalView {
+	width:100%;
+	padding:1px;
+	border:1px solid;
+	border-color:#888 #ccc #ccc #888;
+	margin: 1px 0px 1px 0px;
+	box-sizing: border-box;
+	vertical-align: top;
+	height:14em;
+	overflow-y:scroll;
+}
+
+textarea {
+	width:50%;
+	margin: 1px 0px 1px 0px;
+	box-sizing: border-box;
+	border-radius:2px;
+	border:1px solid;
+	border-color:#888 #ccc #ccc #888;
+	vertical-align: top;
+	word-break: break-all;
+}
+
+textarea.source {
+    box-shadow: 0px 0px 8px 1px rgb(0, 128, 255) inset;
+	width:100%;
+	height:17em;
+}
+
+pre.topLevel {
+	margin:1px;
+	padding-top:1px;
+	white-space: pre-wrap;
+	word-break: break-all;
+	font: 1em/1.4 monospace;
+}
+
+span {
+	white-space: pre-wrap;
+	word-break: break-all;
+	box-shadow: 0px 0px 0px 1px rgba(0, 0, 0, 0.1) inset;
+}
+
+span.depth1 {
+	background-color:#DFD;
+}
+
+span.depth2 {
+	background-color:#AEA;
+}
+
+span.depth3 {
+	background-color:#7D7;
+}
+
+span.depth4 {
+	background-color:#9C6;
+}
+
+span.depth5 {
+	background-color:#AB5;
+}
+
+span.depth6 {
+	background-color:#CA4;
+}
+
+span.depth7 {
+	background-color:#E93;
+}
+
+span.depth8 {
+	background-color:#F71;
+}
+
+span.depth9 {
+	background-color:#F40;
+}
+
+span.thermal0 {
+	background-color:#64679d;
+}
+
+span.thermal1 {
+	background-color:#5884cc;
+}
+
+span.thermal2 {
+	background-color:#6cc3d4;
+}
+
+span.thermal3 {
+	background-color:#66e18b;
+}
+
+span.thermal4 {
+	background-color:#a6ec66;
+}
+
+span.thermal5 {
+	background-color:#f1fc66;
+}
+
+span.thermal6 {
+	background-color:#fcd966;
+}
+
+span.thermal7 {
+	background-color:#fcac66;
+}
+
+span.thermal8 {
+	background-color:#f26464;
+}
+
+span.thermal9 {
+	background-color:#ce6464;
+}
+
+span.thermal10 {
+	background-color:#ab6464;
+}
+
+span.thermal11 {
+	background-color:#886464;
+}
+
+ 	</style>
+</head>
+<body>
+<div class="dock">
+<div id="inputColumn" class="column">
+<b>Original source</b>
+<br><textarea id="originalString" class="source"></textarea>
+</div><div id="thermalColumn" class="column">
+<span class="thermal0">0+ </span><span class="thermal1">1+ </span><span class="thermal2">2+ </span><span class="thermal3">3+ </span><span class="thermal4">4+ </span><span class="thermal5">5+ </span><span class="thermal6">6+ </span><span class="thermal7">7+ </span><span class="thermal8">8+ </span><span class="thermal9">9+ </span><span class="thermal10">10+ </span><span class="thermal11">11+ </span>
+bits/original byte
+<div id="thermalView"></div>
+</div>
+</div>
+<div class="dockControl" id="inputDockControl">&#9660;</div><br>
+<fieldset>
+Attempt method hashing and renaming for
+<input type="checkbox" name="paramOHash2D" id="paramOHash2D" checked="checked"/>2D canvas context
+<input type="checkbox" name="paramOHashWebGL" id="paramOHashWebGL" checked="checked"/>WebGL canvas context
+<input type="checkbox" name="paramOHashAudio" id="paramOHashAudio" checked="checked"/>AudioContext
+<br><input type="checkbox" name="paramOGlobalDefined" id="paramOGlobalDefined" checked="checked"/> Assume global variable <input type="text" size=6 value="c" id="paramOGlobalVariable" /> is a <select id="paramOGlobalType">
+<option value=0 selected>2D canvas context</option>
+<option value=1>WebGL canvas context</option>
+</select> <i>(as in js1k shim)</i>
+<br><input type="checkbox" name="paramOReassignVars" id="paramOReassignVars" checked="checked"/> Reassign variable names to produce consecutive character blocks,
+except for variables <input type="text" value="a b c d g" id="paramOExcludedVars" />
+<br><input type="checkbox" name="paramUseES6" id="paramUseES6" checked="checked"/> Enable ES6 features.
+</fieldset>
+<fieldset>
+<legend><i>Options impacting performance</i></legend>
+<input type="checkbox" name="paramOWithMath" id="paramOWithMath"/> Encapsulate with(Math)
+<br><input type="checkbox" name="paramOWrapInSetInterval" id="paramOWrapInSetInterval"/> Refactor to run with setInterval(). Use variable 
+<input type="text" size=4  id="paramOTimeVariable" /> for time <i>(leave empty to assign one. Time variable should be zero on the first loop and nonzero afterwards)</i>.
+</fieldset>
+<fieldset>
+<legend><b class="bestMessage">RegPack v5.0.2</b></legend>
+<button id="packAction">Pack</button>
+Score = <input type="text" size=6 value=1 id="paramFGain" />
+*gain + <input type="text" size=6 value=0 id="paramFLength" />
+*length + <input type="text" size=6 value=0 id="paramFCopies" />
+*copies
+&nbsp;&nbsp;&nbsp;
+
+Tiebreaker = <select id="paramFTiebreaker">
+<option value=1 selected>longest string first (Js Crush)</option>
+<option value=-1 >most copies first (First Crush)</option>
+</select>
+<br><i>Default settings match built-in formulas for both JS Crush and First Crush. 2/1/0 sometimes achieve better results.</i>
+</fieldset>
+<br>
+<div id="output">
+<div id="preprocessed">
+	<b id="stage0Title">Preprocessed : </b><b id="stage0Message"></b>
+	<br><div id="stage0Output" class="textBox"></div><textarea rows=12 id="stage0Details"></textarea><br>
+</div>
+<div id="crushed">	
+	<b id="stage1Title">Crushed : </b><b id="stage1Message"></b><input type="checkbox" id="stage1Base64"/>base64
+	<br><textarea rows=12 id="stage1Output"></textarea><textarea rows=12 id="stage1Details"></textarea><br>
+</div>
+<div id="packed">	
+	<b id="stage2Title">RegPack'ed: </b><b id="stage2Message"></b><input type="checkbox" id="stage2Base64"/>base64
+	<br><textarea rows=12 id="stage2Output"></textarea><textarea rows=12 id="stage2Details"></textarea><br>
+</div>
+</div>
+<script src="contextDescriptor_browser.js"></script>
+<script src="stringHelper.js"></script>
+<script src="packerData.js"></script>
+<script src="shapeShifter.js"></script>
+<script src="regPack.js"></script>
+<script src="patternViewer.js"></script>
+<script src="thermalViewer.js"></script>
+<script>
+
+var outputCode = [];
+
+function doRegPack() {
+	
+	for (var j=0; j<3; ++j) {
+		document.getElementById("stage"+j+"Output").value = "";
+		document.getElementById("stage"+j+"Details").value = ""	
+	}
+	// Implementation for issue #33 : append the code to the URL
+	var input = document.getElementById("originalString").value;
+	var urlArray = window.location.href.split("#code=");
+	window.location.href = urlArray[0]+"#code="+StringHelper.getInstance().unicodeToBase64(input);
+	
+	// Get rid of comments and empty lines
+	input = input.replace(/([\r\n]|^)\s*\/\/.*|[\r\n]+\s*/g,'');
+	var options = {
+		withMath : document.getElementById("paramOWithMath").checked!="",
+		hash2DContext : document.getElementById("paramOHash2D").checked!="",
+		hashWebGLContext : document.getElementById("paramOHashWebGL").checked!="",
+		hashAudioContext : document.getElementById("paramOHashAudio").checked!="",
+		contextVariableName : document.getElementById("paramOGlobalDefined").checked!=""?document.getElementById("paramOGlobalVariable").value:false,
+		contextType : parseInt(document.getElementById("paramOGlobalType").value),
+		reassignVars : document.getElementById("paramOReassignVars").checked!="",
+		varsNotReassigned : document.getElementById("paramOExcludedVars").value,
+		crushGainFactor : parseFloat(document.getElementById("paramFGain").value),
+		crushLengthFactor : parseFloat(document.getElementById("paramFLength").value),
+		crushCopiesFactor : parseFloat(document.getElementById("paramFCopies").value),
+		crushTiebreakerFactor : parseInt(document.getElementById("paramFTiebreaker").value),
+		wrapInSetInterval : document.getElementById("paramOWrapInSetInterval").checked!="",
+		timeVariableName : document.getElementById("paramOTimeVariable").value,
+		useES6 : document.getElementById("paramUseES6").checked!=""
+	};
+
+	var originalLength = packer.getByteLength(input);
+	var inputList = packer.runPacker(input, options);
+	var methodCount = inputList.length;
+	var patternViewer = new PatternViewer;
+	var thermalViewer = new ThermalViewer;
+		
+	var bestMethod=0, bestStage=0, bestCompression=1e8;
+	for (var i=0; i<methodCount; ++i) {
+		var packerData = inputList[i];
+		for (var j=0; j<4; ++j) {
+			var output = (j==0 ? packerData.contents : packerData.result[j-1][1]);
+			var packedLength = packer.getByteLength(output);
+			if (packedLength < bestCompression) {
+				bestCompression = packedLength;
+				bestMethod = i;
+				bestStage = j;
+			} 
+		}
+	} 
+ 
+	// show the output boxes (hidden beforehand, they collapsed to near-zero size and this was not pretty)
+	document.getElementById("output").style.display = "block";
+
+	var bestOutput = inputList[bestMethod];
+	document.getElementById("stage0Message").innerHTML = resultMessage(originalLength, packer.getByteLength(bestOutput.contents));
+	var outputField = document.getElementById("stage0Output");
+	while (outputField.lastChild) {
+		outputField.removeChild(outputField.lastChild);
+	}
+	outputField.appendChild(patternViewer.render(bestOutput.contents, bestOutput.matchesLookup));
+	document.getElementById("stage0Details").value = outputCode[0] = bestOutput.log;
+	document.getElementById("stage0Details").style.height = outputField.offsetHeight+"px";
+
+	for (var j=1; j<3; ++j) {
+		var stage = j<2 ? j-1 : (packer.getByteLength(bestOutput.result[1][1])< packer.getByteLength(bestOutput.result[2][1]) ? 1 : 2);
+		outputCode[j] = bestOutput.result[stage][1];
+		var outputLength = packer.getByteLength(outputCode[j]);
+		document.getElementById("stage"+j+"Title").setAttribute("class", bestCompression==outputLength ? "bestMessage" : "");
+		document.getElementById("stage"+j+"Message").innerHTML = resultMessage(originalLength, outputLength);
+		document.getElementById("stage"+j+"Message").setAttribute("class", bestCompression==outputLength ? "bestMessage" : "");
+		document.getElementById("stage"+j+"Base64").onclick = function(index) {
+			return function() { 
+				// #52 : use StringHelper implementation instead of btoa() to handle Unicode characters > 255
+				document.getElementById("stage"+index+"Output").value = this.checked ? StringHelper.getInstance().unicodeToBase64(outputCode[index]) : outputCode[index];
+			};
+		} (j);
+		document.getElementById("stage"+j+"Base64").onclick();	// set the textarea contents, raw or base64
+		
+		// highlight best result in green
+		document.getElementById("stage"+j+"Output").setAttribute("class", bestCompression==outputLength ? "best" : "");
+		document.getElementById("stage"+j+"Details").value = bestOutput.result[stage][2];
+	}
+	
+	// clear the thermal view, draw and show it
+	document.getElementById("thermalColumn").style.visibility="visible";
+	var thermalViewPanel = document.getElementById("thermalView");
+	while (thermalViewPanel.firstChild) {
+		thermalViewPanel.removeChild(thermalViewPanel.firstChild);
+	}
+	var completeMapping = bestOutput.thermalMapping;	// thermal map from preprocessing
+	if (bestStage > 0) {
+		// thermal map from packing
+		completeMapping = completeMapping.concat(bestOutput.result[bestStage-1][3]);
+	}
+	thermalViewPanel.appendChild(thermalViewer.render(input, completeMapping));
+
+}
+
+
+document.getElementById("packAction").onclick=function()
+{
+	doRegPack();
+}
+
+document.addEventListener("DOMContentLoaded", function(event) {
+	// Fix for issue #12 : disable AudioContext hashing if the browser does not support it
+	if (typeof AudioContext == "undefined") {
+		hashAudioCheckbox = document.getElementById("paramOHashAudio");
+		hashAudioCheckbox.checked = false;
+		hashAudioCheckbox.disabled = true;
+	}
+	
+	// Implementation for issue #33 : retrieve the original code from the URL, if present, and store in into input box
+	var urlArray = window.location.href.split("#code=");
+	if (urlArray.length == 2) {
+		document.getElementById("originalString").value = StringHelper.getInstance().base64ToUnicode(urlArray[1]);
+	}
+ 
+	// Following #26, add a dock option for the first row containing input and thermal view 
+	document.getElementById("inputDockControl").docked=true;
+	document.getElementById("inputDockControl").onclick = function(event) {
+		this.docked = !this.docked;
+		
+		var originalStringView = document.getElementById("originalString");
+		var originalStringViewHeight="17em";
+		if (!this.docked) {
+			originalStringView.style.height = "auto";
+			originalStringViewHeight = (originalStringView.scrollHeight)+"px"
+		}
+		originalStringView.style.height = originalStringViewHeight;
+		originalStringView.style.overflowY = (this.docked ? "scroll" : "hidden");
+		
+		document.getElementById("thermalView").style.overflowY = this.docked ? "scroll" : "auto";
+		document.getElementById("thermalView").style.height = this.docked ? "14em" : "auto";
+		document.getElementById("thermalColumn").style.height = this.docked ? "15em" : "auto";
+		document.getElementById("inputColumn").style.height = this.docked ? "15em" : "auto";
+		this.firstChild.data = this.docked ? "\u25bc" : "\u25b2";
+	}
+
+});
+
+ 
+
+</script>
+</body>
+</html>
