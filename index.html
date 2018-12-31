@@ -1,6 +1,6 @@
 ﻿<title>Terser-online</title>
 
-<script src="https://unpkg.com/terser@3.8.2/dist/browser.bundle.js"></script>
+<script src="terser.3.8.2.browser.bundle.js"></script>
 <script src="regpack/contextDescriptor_browser.js"></script>
 <script src="regpack/stringHelper.js"></script>
 <script src="regpack/packerData.js"></script>
@@ -10,15 +10,8 @@
 <script src="regpack/thermalViewer.js"></script>
 
 <h2><a href="https://github.com/fabiosantoscode/terser">Terser</a>-online (ES6 minifier)</h2>
-<input type=checkbox id=check> show <a href="https://github.com/fabiosantoscode/terser#compress-options">options</a> 
-
-<span class=pack>
-  <button onclick=output.value=pack(output.value)>RegPack output</button>
-  <input size=2 id=paramOExcludedVars value="a b c">
-  <input size=1 id=paramFGain value="1">
-  <input size=1 id=paramFLength value="0">
-  <input size=1 id=paramFCopies value="0">
-</span>
+<input type=checkbox id=check> show terser options</a> 
+<input type=checkbox id=extra checked> extra compression (js1k)</a> 
 <br>
 <br>
 <textarea id=input placeholder=input></textarea>
@@ -31,18 +24,31 @@
     pure_getters: true
   },
 }</textarea>
-<textarea id=output placeholder=output></textarea>
+<div class=out>
+  <textarea id=output placeholder=output></textarea>
+  <br style=clear:both>
+  <span id=outsize>Output size: 0b</span>
+  <span class=pack>
+  <button onclick=output.value=pack(output.value)>RegPack</button>
+  <input size=2 id=paramOExcludedVars value="a b c">
+  <input size=1 id=paramFGain value="1">
+  <input size=1 id=paramFLength value="0">
+  <input size=1 id=paramFCopies value="0">
+</span>
 
 <style>
 h2 { margin: 0 0 5px; }
 body { font-family: arial; }
-textarea { width: calc(50vw - 25px); height: calc(100vh - 100px); margin: 0 10px 0 0; float: left; }
+textarea, .out { width: calc(50vw - 25px); height: calc(100vh - 100px); margin: 0 10px 0 0; float: left; vertical-align: top; }
+.out { margin: 0 }
 textarea ~ textarea ~ textarea { margin: 0 }
 #options { display: none; }
-:checked ~ #options { display: block; }
-:checked ~ textarea { width: 31vw; }
-.pack { float: right; margin: 0 25px 0 0 }
+#check:checked ~ #options { display: block; }
+#check:checked ~ textarea, #check:checked ~ div, #check:checked ~ div > textarea { width: calc(33vw - 15px); }
+.pack { float: right; }
 input[size="1"] { width: 15px }
+#output { height: calc(100vh - 130px); }
+#outsize, .pack { display: inline-block; margin: 10px 0 0; }
 </style>
 
 <script>
@@ -50,11 +56,26 @@ check.checked = 0;
 input.value = "";
 output.value = "";
 onload = function(){
-  oninput = function(){
+  oninput = onchange = function(){
     try{eval("opt = " + options.value)} catch(e){ opt = {} }
-    result = Terser.minify("onload = function(){" + input.value + "}", opt);
+    if(extra.checked){
+      result = Terser.minify("onload = function(){" + input.value + "}", opt);
+    }
+    else {
+      result = Terser.minify(input.value, opt);
+    }
+    
     if(result.error) output.value = "// error\n" + result.error;
-    else output.value = result.code.length > 19 ? "// output (" + (result.code.length - 1) + "b)\n" + result.code.slice(0, -1).replace(/-- >/g, "-->").replace(/onload=function\(\){(var )?(.*)}/,"$2") : "";
+    else {
+      if(extra.checked){
+        outsize.innerHTML = "Output size: " + (result.code.length - 21) + "b";
+        output.value = result.code.length > 21 ? result.code.slice(0, -1).replace(/-- >/g, "-->").replace(/onload=function\(\){(var )?(.*)}/,"$2") : "";
+      }
+      else {
+        outsize.innerHTML = "Output size: " + (result.code.length) + "b";
+        output.value = result.code.length > 1 ? result.code : "";
+      }
+    }
   }
 }
 
@@ -94,7 +115,7 @@ pack = function(input){
 			var output = (j==0 ? packerData.contents : packerData.result[j-1][1]);
 			var packedLength = packer.getByteLength(output);
       //console.log(packedLength);
-			if (packedLength < bestCompression) {
+			if (packedLength > 0 && packedLength < bestCompression) {
 				bestCompression = packedLength;
 				bestMethod = i;
 				bestStage = j;
@@ -103,8 +124,10 @@ pack = function(input){
 	} 
 
 	var bestOutput = inputList[bestMethod];
+  outsize.innerHTML = "Output size: " + (bestCompression) + "b";
   //console.log(bestOutput.result[bestStage-1][1]);
+  //console.log(bestOutput, bestStage-1);
   
-  return "// output(" + bestCompression + "b)\n" + bestOutput.result[bestStage-1][1];
+  return bestOutput.result[bestStage-1][1];
 }
 </script>
