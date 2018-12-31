@@ -19,7 +19,8 @@
 <style>
 h2 { margin: 0 0 5px; }
 body { font-family: arial; }
-textarea { width: 47vw; height: calc(100vh - 100px); margin: 0 1vw 0 0; float: left; }
+textarea { width: calc(50vw - 25px); height: calc(100vh - 100px); margin: 0 10px 0 0; float: left; }
+textarea ~ textarea { margin: 0 }
 #options { display: none; }
 :checked ~ #options { display: block; }
 :checked ~ textarea { width: 31vw; }
@@ -32,9 +33,9 @@ output.value = "";
 onload = function(){
   oninput = function(){
     try{eval("opt = " + options.value)} catch(e){ opt = {} }
-    result = Terser.minify(input.value, opt);
+    result = Terser.minify("onload = function(){" + input.value + "}", opt);
     if(result.error) output.value = "// error\n" + result.error;
-    else output.value = result.code.length ? "// output (" + (result.code.length - 1) + "b)\n" + result.code.slice(0, -1) : "// output";
+    else output.value = result.code.length ? "// output (" + (result.code.length - 1) + "b)\n" + result.code.slice(0, -1).replace(/-- >/g, "-->").replace(/onload=function\(\){(var )?(.*)}/,"$2") : "// output";
   }
 }
 </script>
