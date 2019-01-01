@@ -19,7 +19,7 @@
 {
   toplevel: true,
   compress: {
-    passes: 3,
+    passes: 5,
     unsafe: true
     pure_getters: true
   },
@@ -56,7 +56,7 @@ check.checked = 0;
 input.value = "";
 output.value = "";
 onload = function(){
-  oninput = onchange = function(){
+  input.oninput = options.oninput = extra.onchange = function(){
     try{eval("opt = " + options.value)} catch(e){ opt = {} }
     if(extra.checked){
       result = Terser.minify("onload = function(){" + input.value + "}", opt);
@@ -76,6 +76,10 @@ onload = function(){
         output.value = result.code.length > 1 ? result.code : "";
       }
     }
+  }
+  
+  output.oninput = function(){
+    outsize.innerHTML = "Output size: " + (output.value.length) + "b";
   }
 }
 
