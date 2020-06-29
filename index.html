@@ -10,12 +10,13 @@
 <script src="regpack/thermalViewer.js"></script>
 
 <h2><a href="https://github.com/fabiosantoscode/terser">Terser</a>-online (ES6 minifier)</h2>
-<input type=checkbox id=check> show terser options</a> 
-<input type=checkbox id=extra checked> extra compression (js1k)</a> 
+<label><input type=checkbox id=check onchange="options.hidden = !this.checked"> show terser options</label> 
+<label><input type=checkbox id=extra checked> extra compression (js1k)</a></label> 
 <br>
 <br>
+<main>
 <textarea id=input placeholder=input></textarea>
-<textarea id=options>// options
+<textarea id=options hidden>// options
 {
   toplevel: true,
   compress: {
@@ -30,21 +31,21 @@
   <span id=outsize>Output size: 0b</span>
   <span class=pack>
   <button onclick=output.value=pack(output.value)>RegPack</button>
-  <input size=2 id=paramOExcludedVars value="a b c">
+  <input size=2 id=paramOExcludedVars value="a b c" title="reassign variables except for these">
   <input size=1 id=paramFGain value="1">
   <input size=1 id=paramFLength value="0">
   <input size=1 id=paramFCopies value="0">
 </span>
+</main>
 
 <style>
 h2 { margin: 0 0 5px; }
 body { font-family: arial; }
-textarea, .out { width: calc(50vw - 25px); height: calc(100vh - 100px); margin: 0 10px 0 0; float: left; vertical-align: top; }
+main { display: flex; flex-direction: row; }
+main>* { flex: 1 1 auto; margin: 0 10px 0 0; }
 .out { margin: 0 }
+.out textarea { width: 100%; }
 textarea ~ textarea ~ textarea { margin: 0 }
-#options { display: none; }
-#check:checked ~ #options { display: block; }
-#check:checked ~ textarea, #check:checked ~ div, #check:checked ~ div > textarea { width: calc(33vw - 15px); }
 .pack { float: right; }
 input[size="1"] { width: 15px }
 #output { height: calc(100vh - 130px); }
