@@ -11,7 +11,8 @@
 
 <h2><a href="https://github.com/fabiosantoscode/terser">Terser</a>-online (ES6 minifier)</h2>
 <label><input type=checkbox id=check onchange="options.hidden = !this.checked"> show terser options</label> 
-<label><input type=checkbox id=extra checked> extra compression (js1k)</a></label> 
+<label><input type=checkbox id=extra checked> extra compression (js1k)</label> 
+<label><input type=checkbox id=zopfli onchange="deflated.hidden = !this.checked; output.oninput()"> compress via zopfli</label> 
 <br>
 <br>
 <main>
@@ -25,37 +26,65 @@
     pure_getters: true
   },
 }</textarea>
-<div class=out>
+<section>
   <textarea id=output placeholder=output></textarea>
   <br style=clear:both>
-  <span id=outsize>Output size: 0b</span>
-  <span class=pack>
-  <button onclick=output.value=pack(output.value)>RegPack</button>
-  <input size=2 id=paramOExcludedVars value="a b c" title="reassign variables except for these">
-  <input size=1 id=paramFGain value="1">
-  <input size=1 id=paramFLength value="0">
-  <input size=1 id=paramFCopies value="0">
-</span>
+  <span class=size id=outsize>Output size: 0b</span>
+  <span class=ops>
+    <button onclick="output.value=pack(output.value); output.oninput()">RegPack</button>
+    <input size=2 id=paramOExcludedVars value="a b c" title="reassign variables except for these">
+    <input size=1 id=paramFGain value="1">
+    <input size=1 id=paramFLength value="0">
+    <input size=1 id=paramFCopies value="0">
+  </span>
+</section>
+<section id=deflated hidden>
+  <textarea id=deflatedvis placeholder=deflated></textarea>
+  <br style=clear:both>
+  <span class=size id=deflatedsize>Deflated size: 0b</span>
+  <span class=ops>
+    <input id=zipFilename size=10 value=a.js onchange=output.oninput()>
+    <button onclick=downloadzip()>Export to zip</button>
+  </span>
+</section>
 </main>
 
 <style>
 h2 { margin: 0 0 5px; }
 body { font-family: arial; }
-main { display: flex; flex-direction: row; }
-main>* { flex: 1 1 auto; margin: 0 10px 0 0; }
-.out { margin: 0 }
-.out textarea { width: 100%; }
-textarea ~ textarea ~ textarea { margin: 0 }
-.pack { float: right; }
+main { display: flex; flex-direction: row; gap: 10px; }
+main>* { flex: 1 1 0; }
+textarea { width: 100%; }
+.ops { float: right; }
 input[size="1"] { width: 15px }
-#output { height: calc(100vh - 130px); }
-#outsize, .pack { display: inline-block; margin: 10px 0 0; }
+section>*:first-child { height: calc(100vh - 130px); }
+.size, .ops { display: inline-block; margin: 10px 0 0; }
 </style>
 
 <script>
-check.checked = 0;
-input.value = "";
-output.value = "";
+worker = null;
+pending = new Map();
+nexttag = 1;
+function callworker(...args) {
+  if (!worker) {
+    worker = new Worker('compress.js');
+    worker.onmessage = e => {
+      const [tag, err, ret] = e.data;
+      const callbacks = pending.get(tag);
+      console.assert(callbacks, 'dropped message');
+      pending.delete(tag);
+      callbacks[err](ret);
+    };
+  }
+  const tag = nexttag++;
+  return new Promise((resolve, reject) => {
+    worker.postMessage([tag, ...args]);
+    pending.set(tag, [resolve, reject]);
+  });
+}
+
+check.checked = zopfli.checked = 0;
+input.value = output.value = deflatedvis.value = "";
 onload = function(){
   input.oninput = options.oninput = extra.onchange = function(){
     try{eval("opt = " + options.value)} catch(e){ opt = {} }
@@ -66,7 +95,10 @@ onload = function(){
       result = Terser.minify(input.value, opt);
     }
     
-    if(result.error) output.value = "// error\n" + result.error;
+    if(result.error){
+      output.value = "// error\n" + result.error;
+      return;
+    }
     else {
       if(extra.checked){
         output.value = result.code.length > 21 ? result.code.slice(0, -1).replace(/-- >/g, "-->").replace(/onload=function\(\){(var )?(.*)}/,"$2") : "";
@@ -74,13 +106,44 @@ onload = function(){
       else {
         output.value = byteLength > 1 ? result.code : "";
       }
-      outsize.innerHTML = "Output size: " + packer.getByteLength(output.value) + "b";
     }
+
+    output.oninput();
   }
   
-  output.oninput = function(){
+  output.oninput = async function(){
     outsize.innerHTML = "Output size: " + packer.getByteLength(output.value) + "b";
+
+    if (!zopfli.checked) return;
+
+    const inflatedbuf = Uint8Array.from(
+      encodeURIComponent(output.value)
+        .replace(/%(..)/g, (_, m) => String.fromCharCode(parseInt(m, 16))),
+      c => c.charCodeAt());
+
+    // TODO need better throttling
+    deflatedvis.disabled = zipFilename.disabled = true;
+    console.time('compress');
+    const deflatedbuf = await callworker('compress', inflatedbuf, 'deflate', { numiterations: 100 });
+    console.timeEnd('compress');
+    const zipped = await callworker('makeZip', zipFilename.value, inflatedbuf, deflatedbuf);
+    deflatedvis.disabled = zipFilename.disabled = false;
+    deflatedvis.value = [...zipped].map(v => v.toString(16).padStart(2, '0')).join(' ');
+    deflatedsize.innerHTML = "Deflated size: " + deflatedbuf.length + "b";
   }
+
+  downloadzip = function() {
+    const digits = deflatedvis.value.matchAll(/[0-9a-f]{2}/gi);
+    const buf = Uint8Array.from(digits, ([c]) => parseInt(c, 16));
+    const blob = new Blob([buf.buffer], { type: 'application/zip' });
+    const url = URL.createObjectURL(blob);
+
+    const tempanchor = document.createElement('a');
+    tempanchor.setAttribute('href', url);
+    tempanchor.setAttribute('download', buf.length + '.zip');
+    tempanchor.click();
+    URL.revokeObject(url);
+  };
 }
 
 pack = function(input){
