@@ -68,66 +68,65 @@ onload = function(){
     if(result.error) output.value = "// error\n" + result.error;
     else {
       if(extra.checked){
-        outsize.innerHTML = "Output size: " + (result.code.length - 21) + "b";
         output.value = result.code.length > 21 ? result.code.slice(0, -1).replace(/-- >/g, "-->").replace(/onload=function\(\){(var )?(.*)}/,"$2") : "";
       }
       else {
-        outsize.innerHTML = "Output size: " + (result.code.length) + "b";
-        output.value = result.code.length > 1 ? result.code : "";
+        output.value = byteLength > 1 ? result.code : "";
       }
+      outsize.innerHTML = "Output size: " + packer.getByteLength(output.value) + "b";
     }
   }
   
   output.oninput = function(){
-    outsize.innerHTML = "Output size: " + (output.value.length) + "b";
+    outsize.innerHTML = "Output size: " + packer.getByteLength(output.value) + "b";
   }
 }
 
 pack = function(input){
-	
-	// Get rid of comments and empty lines
-	input = input.replace(/([\r\n]|^)\s*\/\/.*|[\r\n]+\s*/g,'');
-	var options = {
-		withMath : false,
-		hash2DContext : true,
-		hashWebGLContext : true,
-		hashAudioContext : true,
-		contextVariableName : "c",
-		contextType : 0,
-		reassignVars : true,
-		varsNotReassigned : document.getElementById("paramOExcludedVars").value,
-		crushGainFactor : parseFloat(document.getElementById("paramFGain").value),
-		crushLengthFactor : parseFloat(document.getElementById("paramFLength").value),
-		crushCopiesFactor : parseFloat(document.getElementById("paramFCopies").value),
-		crushTiebreakerFactor : 1,
-		wrapInSetInterval : false,
-		timeVariableName : "",
-		useES6 : true
-	};
+  
+  // Get rid of comments and empty lines
+  input = input.replace(/([\r\n]|^)\s*\/\/.*|[\r\n]+\s*/g,'');
+  var options = {
+    withMath : false,
+    hash2DContext : true,
+    hashWebGLContext : true,
+    hashAudioContext : true,
+    contextVariableName : "c",
+    contextType : 0,
+    reassignVars : true,
+    varsNotReassigned : document.getElementById("paramOExcludedVars").value,
+    crushGainFactor : parseFloat(document.getElementById("paramFGain").value),
+    crushLengthFactor : parseFloat(document.getElementById("paramFLength").value),
+    crushCopiesFactor : parseFloat(document.getElementById("paramFCopies").value),
+    crushTiebreakerFactor : 1,
+    wrapInSetInterval : false,
+    timeVariableName : "",
+    useES6 : true
+  };
 
-	var originalLength = packer.getByteLength(input);
-	var inputList = packer.runPacker(input, options);
-	var methodCount = inputList.length;
-	var patternViewer = new PatternViewer;
-	var thermalViewer = new ThermalViewer;
-		
-	var bestMethod=0, bestStage=0, bestCompression=1e8;
-	for (var i=0; i<methodCount; ++i) {
-		var packerData = inputList[i];
+  var originalLength = packer.getByteLength(input);
+  var inputList = packer.runPacker(input, options);
+  var methodCount = inputList.length;
+  var patternViewer = new PatternViewer;
+  var thermalViewer = new ThermalViewer;
+    
+  var bestMethod=0, bestStage=0, bestCompression=1e8;
+  for (var i=0; i<methodCount; ++i) {
+    var packerData = inputList[i];
     //console.log(packerData);
-		for (var j=0; j<4; ++j) {
-			var output = (j==0 ? packerData.contents : packerData.result[j-1][1]);
-			var packedLength = packer.getByteLength(output);
+    for (var j=0; j<4; ++j) {
+      var output = (j==0 ? packerData.contents : packerData.result[j-1][1]);
+      var packedLength = packer.getByteLength(output);
       //console.log(packedLength);
-			if (packedLength > 0 && packedLength < bestCompression) {
-				bestCompression = packedLength;
-				bestMethod = i;
-				bestStage = j;
-			} 
-		}
-	} 
+      if (packedLength > 0 && packedLength < bestCompression) {
+        bestCompression = packedLength;
+        bestMethod = i;
+        bestStage = j;
+      } 
+    }
+  } 
 
-	var bestOutput = inputList[bestMethod];
+  var bestOutput = inputList[bestMethod];
   outsize.innerHTML = "Output size: " + (bestCompression) + "b";
   //console.log(bestOutput.result[bestStage-1][1]);
   //console.log(bestOutput, bestStage-1);
