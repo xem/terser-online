@@ -108,7 +108,7 @@ h3>.size { float: right; font-weight: normal; }
   <h3>Zopfli <span id=zopfliformat></span> <span id=zopflisize class=size></span></h3>
   <textarea id=zopflioptions class=options rows=10 hidden oninput="output.oninput()">// zopfli options
 {
-  // possible values: gzip, zlib, deflate, zip
+  // possible values: gzip, zlib, deflate, zip, zpng
   format: "zip",
   numiterations: 100,
   blocksplitting: true,
@@ -136,7 +136,7 @@ pending = new Map();
 nexttag = 1;
 function callworker(...args) {
   if (!worker) {
-    worker = new Worker('compress.js?20200706a');
+    worker = new Worker('compress.js?20200706b');
     worker.onmessage = e => {
       const [tag, err, ret] = e.data;
       const callbacks = pending.get(tag);
@@ -202,12 +202,18 @@ async function dozopfli(input) {
       zlib: [1, '', 'application/zlib'],
       deflate: [2, '.deflate', 'application/octet-stream'],
       zip: [2, '.zip', 'application/zip'],
+      zpng: [1, '.html', 'text/html'],
     }[opt.format] || [];
     if (!mimetype) throw 'invalid compression format';
 
     zopfliformat.textContent = '(' + opt.format + ')';
     zopflisize.textContent = 'in progress';
     zopflidownload.disabled = true;
+
+    if (opt.format === 'zpng') {
+      // TODO better filtering & prepare for longer inputs
+      input = "\0" + input + "\0";
+    }
 
     const inflatedbuf = Uint8Array.from(
       encodeURIComponent(input)
@@ -222,6 +228,10 @@ async function dozopfli(input) {
     let outbuf = deflatedbuf;
     if (opt.format === 'zip') {
       outbuf = await callworker('makeZip', opt.zip.filename, inflatedbuf, deflatedbuf);
+    } else if (opt.format === 'zpng') {
+      // TODO make this bootstrap more customizable
+      const bootstrap = "<canvas id=V><img src=# onload=with(V.getContext`2d`)for($=_='';drawImage(this,$--,0),X=getImageData(0,0,1,1).data[0];)_+=String.fromCharCode(X);(e=eval)(_)>";
+      outbuf = await callworker('makePng', inflatedbuf.length - 1, deflatedbuf, bootstrap);
     }
 
     zopflisize.textContent = outbuf.length + "B";

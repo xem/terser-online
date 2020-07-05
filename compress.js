@@ -155,6 +155,203 @@ function makeZip(filename, inflated, deflated) {
   ]);
 }
 
+function makePng(width, deflated, bootstrap) {
+  const four = v => [v >>> 24, v >>> 16, v >>> 8, v];
+  const chunk = (len, data) => [...four(len), ...data, ...four(crc32(data))];
+
+  bootstrap = ensureByteBuffer(bootstrap);
+  if (bootstrap.length < 1 || bootstrap[0] !== 0x3c) {
+    throw 'invalid bootstrap code (should start with `<`)';
+  }
+
+  const image = [
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // signature
+
+    // IHDR
+    ...chunk(13, [
+      0x49, 0x48, 0x44, 0x52,
+      ...four(width), // image width
+      ...four(1), // image height = 1
+      0x08, // bit depth = 8
+      0x00, // color type = grayscale
+      0x00, // compression method = zlib
+      0x00, // filter method = 0
+      0x00, // interlace = no
+    ]),
+
+    // IDAT
+    // recent browsers tolerate missing CRC in the IDAT chunk
+    // *only when they are at the end of the file*.
+    // thus we should pretend that the boostrap code is actually
+    // a part of compressed bitstream left unused instead.
+    ...chunk(
+      deflated.length + bootstrap.length + 3, // overshooting is okay
+      [0x49, 0x44, 0x41, 0x54, ...deflated],
+    ).slice(0, -4),
+
+    // IEND (omitted)
+    //...chunk([0x49, 0x45, 0x4e, 0x44]),
+  ];
+
+  const overlap = overlapOrClose(image, bootstrap);
+  if (typeof overlap === 'number') {
+    return Uint8Array.from([...image, ...bootstrap.slice(overlap)]);
+  } else {
+    return Uint8Array.from([...image, ...overlap, ...bootstrap]);
+  }
+}
+
+// returns a number of bytes that can be overlap,
+// or a suffix (of the maximum length 3) required to reset the parsing state
+function overlapOrClose(prefix, bootstrap) {
+  // this is a partial but compliant HTML5 parser, assuming that browsers do not
+  // detect this "HTML" as ISO-2022-JP (probably impossible due to the PNG signature).
+  //
+  // the goal is to determine a part of the prefix that can be shared with bootstrap
+  // and the parser returns to the known-good initial state at the beginning of the suffix.
+  // we don't do the tree reconstruction stage, so we bail out when generated tokens
+  // would alter the tokenization stage (this should be relatively rare).
+
+  // transitions[currentState][charClass] => nextState
+  //
+  // charClass is a single character, or "alpha" [A-Za-z] or "space" [\x09\x0a\x0c\x20].
+  // if the nextState for given char class doesn't exist, fall back to the "default" class.
+  // some transitions are intentionally commented out, they don't affect the outcome.
+  //
+  // the nextState may have prefixes (processed in this order):
+  // - `$` stashes the current character to the dedicated tag name & markup decl. storage.
+  //   each time also checks for the forbidden tags (case insensitively) and bails out if found.
+  //   (so if `xmp` is forbidden we also forbid `XmP` or `xmpa`. okay with false positives.)
+  // - `>` clears the storage ("emit the current tag token" in the spec).
+  // - `@` retries a given charClass in the nextState ("reconsume" in the spec).
+  const transitions = {
+    data: { default: 'data', /*'&': 'charRef',*/ '<': 'tagOpen' },
+    tagOpen: { default: '@data', '!': '$markupDeclOpen', '/': 'endTagOpen', alpha: '$tagName', '?': 'bogusComment' },
+    endTagOpen: { default: '@bogusComment', alpha: '$tagName', '>': 'data' },
+    tagName: { default: '$tagName', space: 'beforeAttrName', '/': 'selfClosingStartTag', '>': '>data' },
+    beforeAttrName: { default: '@attrName', space: 'beforeAttrName', '/': '@afterAttrName', '>': '@afterAttrName', '=': 'attrName' },
+    attrName: { default: 'attrName', space: '@afterAttrName', '/': '@afterAttrName', '>': '@afterAttrName', '=': 'beforeAttrValue' },
+    afterAttrName: { default: '@attrName', space: 'afterAttrName', '/': 'selfClosingStartTag', '=': 'beforeAttrValue', '>': '>data' },
+    beforeAttrValue: { default: '@attrValueUnquoted', space: 'beforeAttrValue', '"': 'attrValueDoubleQuoted', "'": 'attrValueSingleQuoted', '>': '>data' },
+    attrValueDoubleQuoted: { default: 'attrValueDoubleQuoted', '"': 'afterAttrValueQuoted', /*'&': 'charRef'*/ },
+    attrValueSingleQuoted: { default: 'attrValueSingleQuoted', "'": 'afterAttrValueQuoted', /*'&': 'charRef'*/ },
+    attrValueUnquoted: { default: 'attrValueUnquoted', space: 'beforeAttrName', /*'&': 'charRef',*/ '>': '>data' },
+    afterAttrValueQuoted: { default: '@beforeAttrName', space: 'beforeAttrName', '/': 'selfClosingStartTag', '>': '>data' },
+    selfClosingStartTag: { default: '@beforeAttrName', '>': '>data' },
+    bogusComment: { default: 'bogusComment', '>': 'data' },
+
+    // markupDeclOpen requires lookahead, we expand it into three artifical states
+    markupDeclOpen: { default: '$markupDecl', '-': '>markupDeclDash', '>': '>data' },
+    markupDecl: { default: '$markupDecl', '>': '>data' },
+    markupDeclDash: { default: 'bogusComment', '-': 'commentStart', '>': 'data' },
+
+    commentStart: { default: '@comment', '-': 'commentStartDash', '>': 'data' },
+    commentStartDash: { default: '@comment', '-': 'commentEnd', '>': 'data' },
+    comment: { default: 'comment', /*'<': 'commentLessThanSign',*/ '-': 'commentEndDash' },
+    commentEndDash: { default: '@comment', '-': 'commentEnd' },
+    commentEnd: { default: '@comment', '>': 'data', '!': 'commentEndBang', '-': 'commentEnd' },
+    commentEndBang: { default: '@comment', '-': 'commentEndDash', '>': 'data' },
+  };
+
+  const forbiddenTags = [
+    // contents expects the non-data state
+    'title', 'textarea', // expects RCDATA
+    'style', 'xmp', 'iframe', 'noembed', 'noframes', 'noscript', // expects raw text
+    'script', // expects script data
+    'plaintext', // expects PLAINTEXT
+
+    // the insertion mode for contents disables the script processing
+    'frameset', // "in frameset" insertion mode (ignores all unknown tags)
+
+    // otherwise problematic
+    'template', // contained scripts have a null browsing context, so don't run immediately
+    '!doctype', // affects quirks mode or similar
+    '![cdata[', // only activated in some tags, actually case sensitive but we don't care
+  ];
+
+  const transitOnce = (state, stashed, c) => {
+    const cls =
+      0x61 <= (c | 0x20) && (c | 0x20) <= 0x7a ? 'alpha' :
+      c === 0x09 || c === 0x0a || c === 0x0c || c == 0x20 ? 'space' :
+      String.fromCharCode(c);
+    state = transitions[state][cls] || transitions[state].default;
+    if (state[0] === '$') {
+      stashed += String.fromCharCode(0x41 <= c && c <= 0x5a ? c + 0x20 : c);
+      if (forbiddenTags.indexOf(stashed) >= 0) {
+        throw 'the compressed data contains a problematic `<' + stashed + '` tag, try other input';
+      }
+      state = state.slice(1);
+    } else if (state[0] === '>') {
+      stashed = '';
+      state = state.slice(1);
+    }
+    return { state, stashed }; // we handle @-transitions from the caller
+  };
+
+  const transit = (state, stashed, c) => {
+    let passingThruData = state === 'data';
+    ({ state, stashed } = transitOnce(state, stashed, c));
+    while (state[0] === '@') {
+      passingThruData |= state === '@data';
+      ({ state, stashed } = transitOnce(state.slice(1), stashed, c));
+    }
+    return { state, stashed, passingThruData };
+  };
+
+  let state = 'data', stashed = '';
+  for (let i = 0; i < prefix.length; ++i) {
+    // can we overlap with the bootstrap here?
+    let canOverlap = true;
+    for (let j = 0; j < bootstrap.length && i + j < prefix.length; ++j) {
+      if (prefix[i + j] !== bootstrap[j]) {
+        canOverlap = false;
+        break;
+      }
+    }
+
+    // are we passing thru the "data" state while processing this character?
+    let passingThruData;
+    ({ state, stashed, passingThruData } = transit(state, stashed, prefix[i]));
+    if (canOverlap && passingThruData) return prefix.length - i;
+  }
+
+  // the minimal suffix required to reach the "data" state
+  const suffix = {
+    data: '',
+    tagOpen: '',
+    endTagOpen: '>',
+    tagName: '>',
+    beforeAttrName: '>',
+    attrName: '>',
+    afterAttrName: '>',
+    beforeAttrValue: '>',
+    attrValueDoubleQuoted: '">',
+    attrValueSingleQuoted: "'>",
+    attrValueUnquoted: '>',
+    afterAttrValueQuoted: '>',
+    selfClosingStartTag: '>',
+    bogusComment: '>',
+    markupDeclOpen: '>',
+    markupDecl: '>',
+    markupDeclDash: '>',
+    commentStart: '>',
+    commentStartDash: '>',
+    comment: '-->',
+    commentEndDash: '->',
+    commentEnd: '>',
+    commentEndBang: '>',
+  }[state];
+
+  // verification
+  for (const c of suffix) {
+    ({ state, stashed } = transit(state, stashed, c.charCodeAt()));
+  }
+  if (!transit(state, stashed, bootstrap[0]).passingThruData) {
+    throw 'bug: suffix did not reset the parsing state';
+  }
+  return suffix;
+}
+
 var preinitqueue = null;
 onmessage = e => {
   if (preinitqueue) {
@@ -164,7 +361,7 @@ onmessage = e => {
   }
 };
 
-const funcs = { compress, makeZip };
+const funcs = { compress, makeZip, makePng };
 function processmsg([tag, funcname, ...args]) {
   try {
     const func = funcs[funcname];
