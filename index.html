@@ -1,5 +1,8 @@
-﻿<title>Terser-online</title>
-
+﻿<!doctype html>
+<html>
+<head>
+<meta charset=utf-8>
+<title>Terser-online</title>
 <script src="terser.4.8.0.browser.bundle.js"></script>
 <script src="regpack/contextDescriptor_browser.js"></script>
 <script src="regpack/stringHelper.js"></script>
@@ -8,16 +11,53 @@
 <script src="regpack/regPack.js"></script>
 <script src="regpack/patternViewer.js"></script>
 <script src="regpack/thermalViewer.js"></script>
-
-<h2><a href="https://github.com/fabiosantoscode/terser">Terser</a>-online (ES6 minifier)</h2>
-<label><input type=checkbox id=check onchange="options.hidden = !this.checked"> show terser options</label> 
-<label><input type=checkbox id=extra checked> extra compression (js1k)</label> 
-<label><input type=checkbox id=zopfli onchange="deflated.hidden = !this.checked; output.oninput()"> compress via zopfli</label> 
-<br>
-<br>
+<style>
+html { height: 100%; }
+body { display: flex; flex-direction: column; margin: 10px; height: calc(100vh - 20px); }
+body>*:not(:first-child) { margin-top: 10px; }
+body>header { flex: initial; display: flex; flex-direction: row; justify-content: space-between; align-items: end; }
+body>header>* { flex: initial; }
+main { flex: auto; min-height: 0; display: flex; flex-direction: row; }
+main>*:not(:first-child) { margin-left: 15px; }
+section:not([hidden]) { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+section>*:not(:first-child) { margin-top: 5px; }
+section>footer { display: flex; flex-direction: row; justify-content: space-between; }
+textarea, .output { flex: 1; min-height: 0; width: 100%; resize: none; }
+.output { font-family: monospace; white-space: pre-wrap; word-break: break-all; overflow: hidden auto; border: 1px solid gray; margin: 0; }
+textarea.options { flex: initial; resize: vertical; }
+h2, h3 { margin: 0; }
+h3>.size { float: right; font-weight: normal; }
+.thermal0 { background-color:#64679d; }
+.thermal1 { background-color:#5884cc; }
+.thermal2 { background-color:#6cc3d4; }
+.thermal3 { background-color:#66e18b; }
+.thermal4 { background-color:#a6ec66; }
+.thermal5 { background-color:#f1fc66; }
+.thermal6 { background-color:#fcd966; }
+.thermal7 { background-color:#fcac66; }
+.thermal8 { background-color:#f26464; }
+.thermal9 { background-color:#ce6464; }
+.thermal10 { background-color:#ab6464; }
+.thermal11 { background-color:#886464; }
+</style>
+</head>
+<body>
+<header>
+  <h2><a href="https://github.com/terser/terser">Terser</a>-online (ES6 minifier)</h2>
+  <label>packing method: <select id=packmethod onchange="document.querySelectorAll('section.pack').forEach(s => s.hidden = s.id !== this.value); output.oninput()">
+    <option value=>None</option>
+    <option value=regpack>Regpack (JS)</option>
+    <option value=zopfli>Zopfli (DEFLATE)</option>
+  </select></label>
+</header>
 <main>
-<textarea id=input placeholder=input></textarea>
-<textarea id=options hidden>// options
+<section>
+  <h3>Input <span id=inputsize class=size>0B</span></h3>
+  <textarea id=input></textarea>
+</section>
+<section>
+  <h3>Minified (Terser) <span id=outputsize class=size>0B</span></h3>
+  <textarea id=options class=options rows=10 hidden oninput="input.oninput()">// options
 {
   toplevel: true,
   compress: {
@@ -26,40 +66,69 @@
     pure_getters: true
   },
 }</textarea>
-<section>
-  <textarea id=output placeholder=output></textarea>
-  <br style=clear:both>
-  <span class=size id=outsize>Output size: 0b</span>
-  <span class=ops>
-    <button onclick="output.value=pack(output.value); output.oninput()">RegPack</button>
-    <input size=2 id=paramOExcludedVars value="a b c" title="reassign variables except for these">
-    <input size=1 id=paramFGain value="1">
-    <input size=1 id=paramFLength value="0">
-    <input size=1 id=paramFCopies value="0">
-  </span>
+  <textarea id=output></textarea>
+  <footer>
+    <span>
+      <label><input type=checkbox id=showoptions onchange="options.hidden = !this.checked"> options</label> 
+      <label><input type=checkbox id=extra checked onchange="input.oninput()"> extra compression (js1k)</label> 
+    </span>
+  </footer>
 </section>
-<section id=deflated hidden>
-  <textarea id=deflatedvis placeholder=deflated></textarea>
-  <br style=clear:both>
-  <span class=size id=deflatedsize>Deflated size: 0b</span>
-  <span class=ops>
-    <input id=zipFilename size=10 value=a.js onchange=output.oninput()>
-    <button onclick=downloadzip()>Export to zip</button>
+<section id=regpack class=pack hidden>
+  <h3>Regpack <span id=regpacksize class=size></span></h3>
+  <textarea id=regpackoptions class=options rows=10 hidden oninput="output.oninput()">// regpack options
+{
+  withMath: false,
+  hash2DContext: true,
+  hashWebGLContext: true,
+  hashAudioContext: true,
+  contextVariableName: "c",
+  contextType: 0,
+  reassignVars: true,
+  varsNotReassigned: "a b c d", // js1024
+  crushGainFactor: 1,
+  crushLengthFactor: 0,
+  crushCopiesFactor: 0,
+  crushTiebreakerFactor: 1,
+  wrapInSetInterval: false,
+  timeVariableName: "",
+  useES6: true
+}</textarea>
+  <textarea id=regpackout readonly></textarea>
+  <div class=output id=regpackmap hidden></div>
+  <footer>
+    <span>
+      <label><input type=checkbox id=showregpackoptions onchange="regpackoptions.hidden = !this.checked"> options</label> 
+      <label><input type=checkbox id=showregpackmap onchange="regpackout.hidden = this.checked; regpackmap.hidden = !this.checked"> thermal map</label> 
+    </span>
+    <button onclick="output.value = regpackout.value; output.oninput()">&lArr; Copy to output</button>
+  </footer>
+</section>
+<section id=zopfli class=pack hidden>
+  <h3>Zopfli <span id=zopfliformat></span> <span id=zopflisize class=size></span></h3>
+  <textarea id=zopflioptions class=options rows=10 hidden oninput="output.oninput()">// zopfli options
+{
+  // possible values: gzip, zlib, deflate, zip
+  format: "zip",
+  numiterations: 100,
+  blocksplitting: true,
+  blocksplittingmax: 15,
+
+  zip: {
+    filename: "a.js",
+  },
+}</textarea>
+  <textarea id=zopfliout readonly></textarea>
+  <div class=output id=zopflimap hidden></div>
+  <footer>
+    <span>
+      <label><input type=checkbox id=showzopflioptions onchange="zopflioptions.hidden = !this.checked"> options</label> 
+      <!--<label><input type=checkbox id=showzopflimap onchange="zopfliout.hidden = this.checked; zopflimap.hidden = !this.checked"> thermal map</label> -->
+    </span>
+    <button id=zopflidownload disabled>Download</button>
   </span>
 </section>
 </main>
-
-<style>
-h2 { margin: 0 0 5px; }
-body { font-family: arial; }
-main { display: flex; flex-direction: row; gap: 10px; }
-main>* { flex: 1 1 0; }
-textarea { width: 100%; }
-.ops { float: right; }
-input[size="1"] { width: 15px }
-section>*:first-child { height: calc(100vh - 130px); }
-.size, .ops { display: inline-block; margin: 10px 0 0; }
-</style>
 
 <script>
 worker = null;
@@ -67,7 +136,7 @@ pending = new Map();
 nexttag = 1;
 function callworker(...args) {
   if (!worker) {
-    worker = new Worker('compress.js');
+    worker = new Worker('compress.js?20200706a');
     worker.onmessage = e => {
       const [tag, err, ret] = e.data;
       const callbacks = pending.get(tag);
@@ -83,118 +152,150 @@ function callworker(...args) {
   });
 }
 
-check.checked = zopfli.checked = 0;
-input.value = output.value = deflatedvis.value = "";
-onload = function(){
-  input.oninput = options.oninput = extra.onchange = function(){
-    try{eval("opt = " + options.value)} catch(e){ opt = {} }
-    if(extra.checked){
-      result = Terser.minify("onload = function(){" + input.value + "}", opt);
-    }
-    else {
-      result = Terser.minify(input.value, opt);
-    }
-    
-    if(result.error){
-      output.value = "// error\n" + result.error;
-      return;
-    }
-    else {
-      if(extra.checked){
-        output.value = result.code.length > 21 ? result.code.slice(0, -1).replace(/-- >/g, "-->").replace(/onload=function\(\){(var )?(.*)}/,"$2") : "";
-      }
-      else {
-        output.value = byteLength > 1 ? result.code : "";
-      }
-    }
+packmethod.value = '';
+showoptions.checked = showregpackoptions.checked = showregpackmap.checked = showzopflioptions.checked = false;
+input.value = output.value = "";
 
-    output.oninput();
+input.oninput = function(){
+  inputsize.textContent = packer.getByteLength(input.value) + "B";
+  try {
+    output.value = doterser(input.value, extra.checked, options.value);
+  } catch (e) {
+    output.value = "// error\n" + e.toString();
+    throw e;
   }
-  
-  output.oninput = async function(){
-    outsize.innerHTML = "Output size: " + packer.getByteLength(output.value) + "b";
+  output.oninput();
+}
 
-    if (!zopfli.checked) return;
+output.oninput = function(){
+  outputsize.textContent = packer.getByteLength(output.value) + "B";
+
+  const func = { regpack: doregpack, zopfli: dozopfli }[packmethod.value];
+  if (func) func(output.value);
+}
+
+function doterser(input, extra, options) {
+  const opt = eval("(" + options.value + ")");
+
+  let result;
+  if (extra) {
+    result = Terser.minify("onload = function(){" + input + "}", opt);
+  } else {
+    result = Terser.minify(input, opt);
+  }
+
+  if (result.error) throw result.error;
+
+  if (extra){
+    return result.code.length > 21 ? result.code.slice(0, -1).replace(/-- >/g, "-->").replace(/onload=function\(\){(var )?(.*)}/,"$2") : "";
+  } else {
+    return byteLength > 1 ? result.code : "";
+  }
+}
+
+let lastzopfliout;
+async function dozopfli(input) {
+  try {
+    const opt = eval("(" + zopflioptions.value + ")");
+    const [compressformat, extension, mimetype] = {
+      gzip: [0, '.gz', 'application/gzip'],
+      zlib: [1, '', 'application/zlib'],
+      deflate: [2, '.deflate', 'application/octet-stream'],
+      zip: [2, '.zip', 'application/zip'],
+    }[opt.format] || [];
+    if (!mimetype) throw 'invalid compression format';
+
+    zopfliformat.textContent = '(' + opt.format + ')';
+    zopflisize.textContent = 'in progress';
+    zopflidownload.disabled = true;
 
     const inflatedbuf = Uint8Array.from(
-      encodeURIComponent(output.value)
+      encodeURIComponent(input)
         .replace(/%(..)/g, (_, m) => String.fromCharCode(parseInt(m, 16))),
       c => c.charCodeAt());
 
     // TODO need better throttling
-    deflatedvis.disabled = zipFilename.disabled = true;
     console.time('compress');
-    const deflatedbuf = await callworker('compress', inflatedbuf, 'deflate', { numiterations: 100 });
+    const deflatedbuf = await callworker('compress', inflatedbuf, compressformat, opt);
     console.timeEnd('compress');
-    const zipped = await callworker('makeZip', zipFilename.value, inflatedbuf, deflatedbuf);
-    deflatedvis.disabled = zipFilename.disabled = false;
-    deflatedvis.value = [...zipped].map(v => v.toString(16).padStart(2, '0')).join(' ');
-    deflatedsize.innerHTML = "Deflated size: " + deflatedbuf.length + "b";
+
+    let outbuf = deflatedbuf;
+    if (opt.format === 'zip') {
+      outbuf = await callworker('makeZip', opt.zip.filename, inflatedbuf, deflatedbuf);
+    }
+
+    zopflisize.textContent = outbuf.length + "B";
+    zopflidownload.disabled = false;
+
+    zopfliout.textContent = [...outbuf].map(v => v.toString(16).padStart(2, '0')).join(' ');
+    zopfliout.dataset.extension = extension;
+    zopfliout.dataset.mimetype = mimetype; 
+  } catch (e) {
+    zopfliout.textContent = "// error\n" + e.toString();
+    zopflisize.textContent = '';
+    throw e;
   }
-
-  downloadzip = function() {
-    const digits = deflatedvis.value.matchAll(/[0-9a-f]{2}/gi);
-    const buf = Uint8Array.from(digits, ([c]) => parseInt(c, 16));
-    const blob = new Blob([buf.buffer], { type: 'application/zip' });
-    const url = URL.createObjectURL(blob);
-
-    const tempanchor = document.createElement('a');
-    tempanchor.setAttribute('href', url);
-    tempanchor.setAttribute('download', buf.length + '.zip');
-    tempanchor.click();
-    URL.revokeObject(url);
-  };
 }
 
-pack = function(input){
-  
-  // Get rid of comments and empty lines
-  input = input.replace(/([\r\n]|^)\s*\/\/.*|[\r\n]+\s*/g,'');
-  var options = {
-    withMath : false,
-    hash2DContext : true,
-    hashWebGLContext : true,
-    hashAudioContext : true,
-    contextVariableName : "c",
-    contextType : 0,
-    reassignVars : true,
-    varsNotReassigned : document.getElementById("paramOExcludedVars").value,
-    crushGainFactor : parseFloat(document.getElementById("paramFGain").value),
-    crushLengthFactor : parseFloat(document.getElementById("paramFLength").value),
-    crushCopiesFactor : parseFloat(document.getElementById("paramFCopies").value),
-    crushTiebreakerFactor : 1,
-    wrapInSetInterval : false,
-    timeVariableName : "",
-    useES6 : true
-  };
+zopflidownload.onclick = function() {
+  const { extension, mimetype } = zopfliout.dataset;
+  if (!mimetype) return;
 
-  var originalLength = packer.getByteLength(input);
-  var inputList = packer.runPacker(input, options);
-  var methodCount = inputList.length;
-  var patternViewer = new PatternViewer;
-  var thermalViewer = new ThermalViewer;
-    
-  var bestMethod=0, bestStage=0, bestCompression=1e8;
-  for (var i=0; i<methodCount; ++i) {
-    var packerData = inputList[i];
-    //console.log(packerData);
-    for (var j=0; j<4; ++j) {
-      var output = (j==0 ? packerData.contents : packerData.result[j-1][1]);
-      var packedLength = packer.getByteLength(output);
-      //console.log(packedLength);
-      if (packedLength > 0 && packedLength < bestCompression) {
-        bestCompression = packedLength;
-        bestMethod = i;
-        bestStage = j;
-      } 
-    }
-  } 
+  const digits = zopfliout.value.matchAll(/[0-9a-f]{2}/gi);
+  const buf = Uint8Array.from(digits, ([c]) => parseInt(c, 16));
+  const blob = new Blob([buf.buffer], { type: mimetype });
+  const url = URL.createObjectURL(blob);
 
-  var bestOutput = inputList[bestMethod];
-  outsize.innerHTML = "Output size: " + (bestCompression) + "b";
-  //console.log(bestOutput.result[bestStage-1][1]);
-  //console.log(bestOutput, bestStage-1);
-  
-  return bestOutput.result[bestStage-1][1];
+  const tempanchor = document.createElement('a');
+  tempanchor.setAttribute('href', url);
+  tempanchor.setAttribute('download', buf.length + extension);
+  tempanchor.click();
+  URL.revokeObjectURL(url);
+};
+
+function doregpack(input) {
+  try {
+    // Get rid of comments and empty lines
+    input = input.replace(/([\r\n]|^)\s*\/\/.*|[\r\n]+\s*/g,'');
+
+    const options = eval("(" + regpackoptions.value + ")");
+
+    var originalLength = packer.getByteLength(input);
+    var inputList = packer.runPacker(input, options);
+    var methodCount = inputList.length;
+    var patternViewer = new PatternViewer;
+    var thermalViewer = new ThermalViewer;
+      
+    var bestMethod=0, bestStage=0, bestCompression=1e8;
+    for (var i=0; i<methodCount; ++i) {
+      var packerData = inputList[i];
+      //console.log(packerData);
+      for (var j=0; j<4; ++j) {
+        var output = (j==0 ? packerData.contents : packerData.result[j-1][1]);
+        var packedLength = packer.getByteLength(output);
+        //console.log(packedLength);
+        if (packedLength > 0 && packedLength < bestCompression) {
+          bestCompression = packedLength;
+          bestMethod = i;
+          bestStage = j;
+        } 
+      }
+    } 
+
+    const bestOutput = inputList[bestMethod];
+    const bestVal = (bestStage==0 ? bestOutput.contents : bestOutput.result[bestStage-1][1]);
+    regpackout.value = bestVal;
+    regpacksize.textContent = bestCompression + "B";
+
+    const thermalMapping = bestOutput.thermalMapping.slice(0);
+    if (bestStage > 0) thermalMapping.push(...bestOutput.result[bestStage-1][3]);
+    regpackmap.innerHTML = thermalViewer.render(input, thermalMapping).innerHTML;
+  } catch (e) {
+    regpackout.textContent = "// error\n" + e.toString();
+    regpacksize.textContent = '';
+    throw e;
+  }
 }
 </script>
+</body>
+</html>

@@ -36,7 +36,7 @@ function compress(input, format, options) {
 
   const output = z._createZopfliJsOutput();
   z._compress(bufferPtr, byteBuffer.length, output,
-    {gzip: 0, zlib: 1, deflate: 2}[format],
+    format,
     opts.verbose,
     opts.verbose_more,
     opts.numiterations,
@@ -164,14 +164,14 @@ onmessage = e => {
   }
 };
 
-function processmsg([tag, func, ...args]) {
+const funcs = { compress, makeZip };
+function processmsg([tag, funcname, ...args]) {
   try {
-    if (func === 'compress') {
-      postMessage([tag, 0, compress(...args)]);
-    } else if (func === 'makeZip') {
-      postMessage([tag, 0, makeZip(...args)]);
+    const func = funcs[funcname];
+    if (func) {
+      postMessage([tag, 0, func(...args)]);
     } else {
-      throw 'unknown func';
+      throw 'unknown func ' + funcname;
     }
   } catch (e) {
     postMessage([tag, 1, e.toString()]);
