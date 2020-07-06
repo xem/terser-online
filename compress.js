@@ -1,58 +1,14 @@
 "use strict";
 
-this.window = this;
-importScripts('libzopfli.js');
-
-// assumes that window.Module is a wasm output for zopfli
-// adapted from https://github.com/gfx/universal-zopfli-js/
-const z = window.Module;
-
 function ensureByteBuffer(input) {
   if (typeof input === 'string') {
-    const a = z.intArrayFromString(input);
-    a.length--; // because emscripten's intArrayFromString() adds trailing nul
-    return a;
+    return Uint8Array.from(
+      encodeURIComponent(input)
+        .replace(/%(..)/g, (_, m) => String.fromCharCode(parseInt(m, 16))),
+      c => c.charCodeAt());
   } else {
     return input;
   }
-}
-
-const defaultOptions = {
-  verbose: false,
-  verbose_more: false,
-  numiterations: 15,
-  blocksplitting: true,
-  blocksplittingmax: 15,
-};
-
-function compress(input, format, options) {
-  console.assert(input != null, "buffer must not be null");
-  console.assert(options != null, "options must not be null");
-
-  const byteBuffer = ensureByteBuffer(input);
-  const bufferPtr = z.allocate(byteBuffer, 'i8', z.ALLOC_NORMAL);
-
-  const opts = { ...defaultOptions, ...options };
-
-  const output = z._createZopfliJsOutput();
-  z._compress(bufferPtr, byteBuffer.length, output,
-    format,
-    opts.verbose,
-    opts.verbose_more,
-    opts.numiterations,
-    opts.blocksplitting,
-    opts.blocksplittingmax,
-  );
-
-  const outputPtr = z._getBuffer(output);
-  const outputSize = z._getBufferSize(output);
-
-  const result = z.HEAPU8.slice(outputPtr, outputPtr + outputSize);
-  z._deallocate(outputPtr);
-  z._deallocate(output);
-  z._deallocate(bufferPtr);
-
-  return result;
 }
 
 // adapted from https://stackoverflow.com/a/18639999/225272
@@ -155,7 +111,7 @@ function makeZip(filename, inflated, deflated) {
   ]);
 }
 
-function makePng(width, deflated, bootstrap) {
+function makePng(width, height, deflated, bootstrap) {
   const four = v => [v >>> 24, v >>> 16, v >>> 8, v];
   const chunk = (len, data) => [...four(len), ...data, ...four(crc32(data))];
 
@@ -350,38 +306,5 @@ function overlapOrClose(prefix, bootstrap) {
     throw 'bug: suffix did not reset the parsing state';
   }
   return suffix;
-}
-
-var preinitqueue = null;
-onmessage = e => {
-  if (preinitqueue) {
-    preinitqueue.push(e.data);
-  } else {
-    processmsg(e.data);
-  }
-};
-
-const funcs = { compress, makeZip, makePng };
-function processmsg([tag, funcname, ...args]) {
-  try {
-    const func = funcs[funcname];
-    if (func) {
-      postMessage([tag, 0, func(...args)]);
-    } else {
-      throw 'unknown func ' + funcname;
-    }
-  } catch (e) {
-    postMessage([tag, 1, e.toString()]);
-  }
-};
-
-// libzopfli may be initialized asynchronously, need to delay message processing
-if (!runtimeInitialized) {
-  preinitqueue = [];
-  addOnInit(() => {
-    const queue = preinitqueue;
-    preinitqueue = null;
-    for (const data of queue) processmsg(data);
-  });
 }
 

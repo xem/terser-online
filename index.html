@@ -11,6 +11,7 @@
 <script src="regpack/regPack.js"></script>
 <script src="regpack/patternViewer.js"></script>
 <script src="regpack/thermalViewer.js"></script>
+<script src="compress.js"></script>
 <style>
 html { height: 100%; }
 body { display: flex; flex-direction: column; margin: 10px; height: calc(100vh - 20px); }
@@ -136,7 +137,7 @@ pending = new Map();
 nexttag = 1;
 function callworker(...args) {
   if (!worker) {
-    worker = new Worker('compress.js?20200706b');
+    worker = new Worker('compressworker.js?20200706c');
     worker.onmessage = e => {
       const [tag, err, ret] = e.data;
       const callbacks = pending.get(tag);
@@ -215,10 +216,7 @@ async function dozopfli(input) {
       input = "\0" + input + "\0";
     }
 
-    const inflatedbuf = Uint8Array.from(
-      encodeURIComponent(input)
-        .replace(/%(..)/g, (_, m) => String.fromCharCode(parseInt(m, 16))),
-      c => c.charCodeAt());
+    const inflatedbuf = ensureByteBuffer(input);
 
     // TODO need better throttling
     console.time('compress');
@@ -227,11 +225,11 @@ async function dozopfli(input) {
 
     let outbuf = deflatedbuf;
     if (opt.format === 'zip') {
-      outbuf = await callworker('makeZip', opt.zip.filename, inflatedbuf, deflatedbuf);
+      outbuf = makeZip(opt.zip.filename, inflatedbuf, deflatedbuf);
     } else if (opt.format === 'zpng') {
       // TODO make this bootstrap more customizable
       const bootstrap = "<canvas id=V><img src=# onload=with(V.getContext`2d`)for($=_='';drawImage(this,$--,0),X=getImageData(0,0,1,1).data[0];)_+=String.fromCharCode(X);(e=eval)(_)>";
-      outbuf = await callworker('makePng', inflatedbuf.length - 1, deflatedbuf, bootstrap);
+      outbuf = makePng(inflated.length - 1, deflatedbuf, bootstrap);
     }
 
     zopflisize.textContent = outbuf.length + "B";
