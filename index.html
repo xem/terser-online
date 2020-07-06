@@ -212,15 +212,20 @@ async function dozopfli(input) {
     zopflidownload.disabled = true;
 
     if (opt.format === 'zpng') {
-      // TODO better filtering & prepare for longer inputs
-      input = "\0" + input + "\0";
+      input += "\0"; // bootstrap expects a trailing null byte
     }
 
     const inflatedbuf = ensureByteBuffer(input);
 
     // TODO need better throttling
     console.time('compress');
-    const deflatedbuf = await callworker('compress', inflatedbuf, compressformat, opt);
+    let deflatedbuf;
+    let width, height;
+    if (opt.format === 'zpng') {
+      ({ width, height, compressed: deflatedbuf } = await callworker('compressIDAT', inflatedbuf, opt));
+    } else {
+      deflatedbuf = await callworker('compress', inflatedbuf, compressformat, opt);
+    }
     console.timeEnd('compress');
 
     let outbuf = deflatedbuf;
@@ -229,7 +234,7 @@ async function dozopfli(input) {
     } else if (opt.format === 'zpng') {
       // TODO make this bootstrap more customizable
       const bootstrap = "<canvas id=V><img src=# onload=with(V.getContext`2d`)for($=_='';drawImage(this,$--,0),X=getImageData(0,0,1,1).data[0];)_+=String.fromCharCode(X);(e=eval)(_)>";
-      outbuf = makePng(inflated.length - 1, deflatedbuf, bootstrap);
+      outbuf = makePng(width, height, deflatedbuf, bootstrap);
     }
 
     zopflisize.textContent = outbuf.length + "B";

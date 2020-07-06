@@ -57,6 +57,43 @@ function compress(input, format, options) {
   return result;
 }
 
+function* enumFiltered(input) {
+  // none
+  yield {
+    width: input.length, height: 1,
+    filtered: [0x00, ...input],
+  };
+  // sub
+  yield {
+    width: input.length, height: 1,
+    filtered: [0x01, ...input.map((v, i) => (v - (input[i-1] || 0)) & 255)],
+  };
+  // up (no top pixel, essentially same to none)
+  yield {
+    width: input.length, height: 1,
+    filtered: [0x02, ...input],
+  };
+  // average
+  yield {
+    width: input.length, height: 1,
+    filtered: [0x03, ...input.map((v, i) => (v - ((input[i-1] || 0) >> 1)) & 255)],
+  };
+  // paeth (no top pixel, essentially same to sub)
+  yield {
+    width: input.length, height: 1,
+    filtered: [0x04, ...input.map((v, i) => (v - (input[i-1] || 0)) & 255)],
+  };
+}
+
+function compressIDAT(input, options) {
+  let best;
+  for (const { width, height, filtered } of enumFiltered(input)) {
+    const compressed = compress(filtered, 1 /*zlib*/, options);
+    if (!best || best.compressed.length > compressed.length) best = { width, height, compressed };
+  }
+  return best;
+}
+
 var preinitqueue = null;
 onmessage = e => {
   if (preinitqueue) {
@@ -66,7 +103,7 @@ onmessage = e => {
   }
 };
 
-const funcs = { compress };
+const funcs = { compress, compressIDAT };
 function processmsg([tag, funcname, ...args]) {
   try {
     const func = funcs[funcname];
