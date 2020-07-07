@@ -133,23 +133,33 @@ h3>.size { float: right; font-weight: normal; }
 
 <script>
 worker = null;
-pending = new Map();
-nexttag = 1;
-function callworker(...args) {
+queue = []; // { args, resolve, reject, signal }, [0] is being processed
+function callworker(args, signal) {
   if (!worker) {
     worker = new Worker('compressworker.js?20200706c');
     worker.onmessage = e => {
-      const [tag, err, ret] = e.data;
-      const callbacks = pending.get(tag);
-      console.assert(callbacks, 'dropped message');
-      pending.delete(tag);
-      callbacks[err](ret);
+      const [, err, ret] = e.data;
+      let { args, resolve, reject, signal } = queue.shift() || {};
+      console.assert(args, 'dropped message');
+      if (signal?.aborted) {
+        reject(new DOMException('callworker aborted', 'AbortError'));
+      } else {
+        (err ? reject : resolve)?.(ret);
+      }
+      while (queue.length > 0 && queue[0].signal.aborted) {
+        queue.shift().reject(new DOMException('callworker aborted', 'AbortError'));
+      }
+      if (queue.length > 0) {
+        worker.postMessage([0, ...queue[0].args]);
+      }
     };
   }
-  const tag = nexttag++;
   return new Promise((resolve, reject) => {
-    worker.postMessage([tag, ...args]);
-    pending.set(tag, [resolve, reject]);
+    if (signal.aborted) throw new DOMException('callworker aborted', 'AbortError');
+    queue.push({ args, resolve, reject, signal });
+    if (queue.length === 1) {
+      worker.postMessage([0, ...args]);
+    }
   });
 }
 
@@ -168,11 +178,16 @@ input.oninput = function(){
   output.oninput();
 }
 
+let abortCtrl;
 output.oninput = function(){
   outputsize.textContent = packer.getByteLength(output.value) + "B";
 
   const func = { regpack: doregpack, zopfli: dozopfli }[packmethod.value];
-  if (func) func(output.value);
+  if (func) {
+    abortCtrl?.abort();
+    abortCtrl = new AbortController();
+    func(output.value, abortCtrl.signal);
+  }
 }
 
 function doterser(input, extra, options) {
@@ -195,7 +210,7 @@ function doterser(input, extra, options) {
 }
 
 let lastzopfliout;
-async function dozopfli(input) {
+async function dozopfli(input, signal) {
   try {
     const opt = eval("(" + zopflioptions.value + ")");
     const [compressformat, extension, mimetype] = {
@@ -217,14 +232,13 @@ async function dozopfli(input) {
 
     const inflatedbuf = ensureByteBuffer(input);
 
-    // TODO need better throttling
     console.time('compress');
     let deflatedbuf;
     let width, height;
     if (opt.format === 'zpng') {
-      ({ width, height, compressed: deflatedbuf } = await callworker('compressIDAT', inflatedbuf, opt));
+      ({ width, height, compressed: deflatedbuf } = await callworker(['compressIDAT', inflatedbuf, opt], signal));
     } else {
-      deflatedbuf = await callworker('compress', inflatedbuf, compressformat, opt);
+      deflatedbuf = await callworker(['compress', inflatedbuf, compressformat, opt], signal);
     }
     console.timeEnd('compress');
 
@@ -244,9 +258,13 @@ async function dozopfli(input) {
     zopfliout.dataset.extension = extension;
     zopfliout.dataset.mimetype = mimetype; 
   } catch (e) {
-    zopfliout.textContent = "// error\n" + e.toString();
-    zopflisize.textContent = '';
-    throw e;
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      zopflisize.textContent = 'in progress';
+    } else {
+      zopflisize.textContent = '';
+      zopfliout.textContent = "// error\n" + e.toString();
+      throw e;
+    }
   }
 }
 
@@ -266,7 +284,7 @@ zopflidownload.onclick = function() {
   URL.revokeObjectURL(url);
 };
 
-function doregpack(input) {
+async function doregpack(input, signal) {
   try {
     // Get rid of comments and empty lines
     input = input.replace(/([\r\n]|^)\s*\/\/.*|[\r\n]+\s*/g,'');
