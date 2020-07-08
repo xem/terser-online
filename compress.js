@@ -308,3 +308,180 @@ function overlapOrClose(prefix, bootstrap) {
   return suffix;
 }
 
+// assumes the zopfli output; error handling is sparse
+// format is same as zopfli: 0 (gzip), 1 (zlib), 2 (deflate)
+// output is [[DEFLATE overhead, [bit size, inflated buf], ...], ...]
+// e.g. [[25, [9, [65]], [7, [66, 67, 68]]]] corresponds to a stream
+//      where `A` encoded in 9 bits, `BCD` together encoded in 7 bits,
+//      and all wrapped with 25 bit overhead from DEFLATE (not counting containers)
+function* mapZopfli(format, deflated) {
+  let cur = 0;
+  let end = deflated.length;
+
+  if (format === 0) {
+    if (deflated[0] !== 0x1f) throw 'gzip with incorrect magic1';
+    if (deflated[1] !== 0x8b) throw 'gzip with incorrect magic2';
+    if (deflated[2] !== 0x08) throw 'gzip with unexpected compression method';
+    const flags = deflated[3];
+    cur = 10;
+    if (flags & 0x04) cur += 2 + (deflated[cur] | deflated[cur + 1] << 8) + 2; // FEXTRA
+    if (flags & 0x08) cur = deflated.indexOf(0, cur) + 1; // FNAME
+    if (flags & 0x10) cur = deflated.indexOf(0, cur) + 1; // FCOMMENT
+    if (flags & 0x02) cur += 2; // FHCRC
+    end -= 8;
+  } else if (format === 1) {
+    if ((deflated[0] & 0x0f) !== 0x08) throw 'zlib with unexpected compression method';
+    if (deflated[1] & 0x20) throw 'zlib with unexpected preset dictionary';
+    if (((deflated[0] << 8 | deflated[1]) >>> 0) % 31) throw 'zlib with incorrect check'; 
+    cur = 2;
+    end -= 4;
+  }
+
+  let unread = 0;
+  let nunread = 0; // bits
+  const nbitsRead = () => cur * 8 + nunread;
+  const bits = (nbits=1) => {
+    while (nunread < nbits) {
+      if (cur >= end) throw 'incomplete deflate stream';
+      unread |= deflated[cur++] << nunread;
+      nunread += 8;
+    }
+    const read = unread & ((1 << nbits) - 1);
+    unread >>= nbits;
+    nunread -= nbits;
+    return read;
+  };
+  const bytes = (nbytes=1) => {
+    if (cur + nbytes >= end) throw 'incomplete deflate stream';
+    unread = nunread = 0; // sync to byte boundary
+    const start = cur;
+    cur += nbytes;
+    return deflated.slice(start, cur);
+  };
+
+  const lzWindow = [];
+  while (true) {
+    const blockStart = nbitsRead();
+    const blockIsFinal = bits();
+    const blockType = bits(2);
+    if (blockType == 0) {
+      const [len1, len2] = bytes(4);
+      const len = len1 | len2 << 8;
+      const overhead = nbitsRead() - blockStart;
+      const read = bytes(len);
+      lzWindow.push(...read);
+      yield [overhead, [len * 8, read]];
+    } else if (blockType === 3) {
+      throw 'deflate with reserved block type';
+    } else {
+      const treeFromLengths = lengths => {
+        const tree = {};
+        let code = 0;
+        for (let i = 1; i < lengths.length; ++i) {
+          lengths.forEach((length, symbol) => {
+            if (length === i) tree[[i, code++]] = symbol;
+          });
+          code <<= 1;
+        }
+        tree.maxLength = lengths.length - 1;
+        return tree;
+      };
+
+      const decodeFromTree = tree => {
+        let read = 0;
+        let nread = 0;
+        do {
+          read = read << 1 | bits();
+          ++nread;
+          const symbol = tree[[nread, read]];
+          if (symbol !== undefined) return [nread, symbol];
+        } while (nread <= tree.maxLength);
+        throw 'invalid huffman code in deflate stream';
+      };
+
+      let litOrLenTree, distTree;
+      if (blockType === 1) {
+        let i = 0, j;
+        litOrLenTree = { maxLength: 9 };
+        for (j = 0b00110000; i < 144; ) litOrLenTree[[8, j++]] = i++;
+        for (j = 0b110010000; i < 256; ) litOrLenTree[[9, j++]] = i++;
+        for (j = 0b0000000; i < 280; ) litOrLenTree[[7, j++]] = i++;
+        for (j = 0b11000000; i < 288; ) litOrLenTree[[8, j++]] = i++;
+        distTree = { maxLength: 5 };
+        for (i = j = 0; i < 32; ) distTree[[5, j++]] = i++;
+      } else {
+        const ncodes = bits(5) + 257; // # of (non-literal) length codes
+        const ndists = bits(5) + 1; // # of distance codes
+
+        // intermediate tree
+        const nicodes = bits(4) + 4;
+        const icodes = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15].slice(0, nicodes);
+        const icodeLengths = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        for (const icode of icodes) icodeLengths[icode] = bits(3);
+        const icodeTree = treeFromLengths(icodeLengths);
+
+        // actual huffman trees (two of them, but decoded into a single stream before split)
+        const codeLengths = [];
+        while (codeLengths.length < ncodes + ndists) {
+          const [_, c] = decodeFromTree(icodeTree);
+          if (c === 16) {
+            const last = codeLengths[codeLengths.length - 1];
+            for (let i = bits(2) + 3; i > 0; --i) codeLengths.push(last);
+          } else if (c === 17) {
+            for (let i = bits(3) + 3; i > 0; --i) codeLengths.push(0);
+          } else if (c === 18) {
+            for (let i = bits(7) + 11; i > 0; --i) codeLengths.push(0);
+          } else {
+            codeLengths.push(c);
+          }
+        }
+        litOrLenTree = treeFromLengths(codeLengths.slice(0, ncodes));
+        distTree = treeFromLengths(codeLengths.slice(ncodes));
+      }
+
+      const lenBase = [
+        3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
+        35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258,
+      ];
+      const lenBits = [
+        0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3,
+        4, 4, 4, 4, 5, 5, 5, 5, 0,
+      ];
+      const distBase = [
+        1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129,
+        193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097,
+        6145, 8193, 12289, 16385, 24577,
+      ];
+      const distBits = [
+        0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7,
+        8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13,
+      ];
+
+      const block = [nbitsRead() - blockStart];
+      while (true) {
+        let [nread, c] = decodeFromTree(litOrLenTree);
+        if (c < 256) {
+          block.push([nread, [c]]);
+          lzWindow.push(c);
+        } else if (c === 256) {
+          block[0] += nread; // end-of-block symbol is kinda overhead
+          break;
+        } else {
+          c -= 257;
+          nread += lenBits[c];
+          const length = bits(lenBits[c]) + lenBase[c];
+          [, c] = decodeFromTree(distTree);
+          nread += distBits[c];
+          const distance = bits(distBits[c]) + distBase[c];
+          for (let i = 0; i < length; ++i) {
+            lzWindow.push(lzWindow[lzWindow.length - distance]);
+          }
+          block.push([nread, lzWindow.slice(-length)]);
+        }
+      }
+      yield block;
+    }
+    if (blockIsFinal) break;
+  }
+}
+

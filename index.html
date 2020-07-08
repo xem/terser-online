@@ -25,21 +25,22 @@ section>*:not(:first-child) { margin-top: 5px; }
 section>footer { display: flex; flex-direction: row; justify-content: space-between; }
 textarea, .output { flex: 1; min-height: 0; width: 100%; resize: none; }
 .output { font-family: monospace; white-space: pre-wrap; word-break: break-all; overflow: hidden auto; border: 1px solid gray; margin: 0; }
+.output tt { font-size: 50%; white-space: nowrap; }
 textarea.options { flex: initial; resize: vertical; }
 h2, h3 { margin: 0; }
 h3>.size { float: right; font-weight: normal; }
-.thermal0 { background-color:#64679d; }
-.thermal1 { background-color:#5884cc; }
-.thermal2 { background-color:#6cc3d4; }
+.thermal0 { background-color:#64679d; color: white; }
+.thermal1 { background-color:#5884cc; color: white; }
+.thermal2 { background-color:#6cc3d4; color: white; }
 .thermal3 { background-color:#66e18b; }
 .thermal4 { background-color:#a6ec66; }
 .thermal5 { background-color:#f1fc66; }
 .thermal6 { background-color:#fcd966; }
 .thermal7 { background-color:#fcac66; }
 .thermal8 { background-color:#f26464; }
-.thermal9 { background-color:#ce6464; }
-.thermal10 { background-color:#ab6464; }
-.thermal11 { background-color:#886464; }
+.thermal9 { background-color:#ce6464; color: white; }
+.thermal10 { background-color:#ab6464; color: white; }
+.thermal11 { background-color:#886464; color: white; }
 </style>
 </head>
 <body>
@@ -70,8 +71,8 @@ h3>.size { float: right; font-weight: normal; }
   <textarea id=output></textarea>
   <footer>
     <span>
-      <label><input type=checkbox id=showoptions onchange="options.hidden = !this.checked"> options</label> 
-      <label><input type=checkbox id=extra checked onchange="input.oninput()"> extra compression (js1k)</label> 
+      <label><input type=checkbox id=showoptions onchange="options.hidden = !this.checked"> options</label>
+      <label><input type=checkbox id=extra checked onchange="input.oninput()"> extra compression (js1k)</label>
     </span>
   </footer>
 </section>
@@ -99,8 +100,8 @@ h3>.size { float: right; font-weight: normal; }
   <div class=output id=regpackmap hidden></div>
   <footer>
     <span>
-      <label><input type=checkbox id=showregpackoptions onchange="regpackoptions.hidden = !this.checked"> options</label> 
-      <label><input type=checkbox id=showregpackmap onchange="regpackout.hidden = this.checked; regpackmap.hidden = !this.checked"> thermal map</label> 
+      <label><input type=checkbox id=showregpackoptions onchange="regpackoptions.hidden = !this.checked"> options</label>
+      <label><input type=checkbox id=showregpackmap onchange="regpackout.hidden = this.checked; regpackmap.hidden = !this.checked"> thermal map</label>
     </span>
     <button onclick="output.value = regpackout.value; output.oninput()">&lArr; Copy to output</button>
   </footer>
@@ -123,8 +124,8 @@ h3>.size { float: right; font-weight: normal; }
   <div class=output id=zopflimap hidden></div>
   <footer>
     <span>
-      <label><input type=checkbox id=showzopflioptions onchange="zopflioptions.hidden = !this.checked"> options</label> 
-      <!--<label><input type=checkbox id=showzopflimap onchange="zopfliout.hidden = this.checked; zopflimap.hidden = !this.checked"> thermal map</label> -->
+      <label><input type=checkbox id=showzopflioptions onchange="zopflioptions.hidden = !this.checked"> options</label>
+      <label><input type=checkbox id=showzopflimap onchange="zopfliout.hidden = this.checked; zopflimap.hidden = !this.checked"> thermal map</label>
     </span>
     <button id=zopflidownload disabled>Download</button>
   </span>
@@ -164,7 +165,7 @@ function callworker(args, signal) {
 }
 
 packmethod.value = '';
-showoptions.checked = showregpackoptions.checked = showregpackmap.checked = showzopflioptions.checked = false;
+showoptions.checked = showregpackoptions.checked = showregpackmap.checked = showzopflioptions.checked = showzopflimap.checked = false;
 input.value = output.value = "";
 
 input.oninput = function(){
@@ -256,7 +257,37 @@ async function dozopfli(input, signal) {
 
     zopfliout.textContent = [...outbuf].map(v => v.toString(16).padStart(2, '0')).join(' ');
     zopfliout.dataset.extension = extension;
-    zopfliout.dataset.mimetype = mimetype; 
+    zopfliout.dataset.mimetype = mimetype;
+
+    console.time('mapCompress');
+    const thermalMap = [];
+    const escaped = { 0x20: '&nbsp;', 0x26: '&amp;', 0x3c: '&lt;', 0x3e: '&gt;' };
+    let i = (opt.format === 'zpng' ? -1 : 0);
+    for (const [blockOverhead, ...block] of mapZopfli(compressformat, deflatedbuf)) {
+      for (const [nbits, data] of block) {
+        thermalMap.push(`<span class="thermal${nbits / data.length | 0}">`);
+        let realData;
+        if (opt.format === 'zpng') { // reverse PNG filters if any
+          if (i < 0) {
+            realData = data.slice(0, -i);
+            realData.push(...inflatedbuf.slice(0, data.length + i));
+          } else {
+            realData = inflatedbuf.slice(i, i + data.length);
+          }
+          i += data.length;
+        }
+        for (const c of realData || data) {
+          if (c < 0x20 || c > 0x7e) {
+            thermalMap.push(`<tt>${c.toString(16).toUpperCase().padStart(2, '0')}</tt>`);
+          } else {
+            thermalMap.push(escaped[c] || String.fromCharCode(c));
+          }
+        }
+        thermalMap.push(`</span>`);
+      }
+    }
+    zopflimap.innerHTML = thermalMap.join('');
+    console.timeEnd('mapCompress');
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') {
       zopflisize.textContent = 'in progress';
