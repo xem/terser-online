@@ -47,7 +47,7 @@ h3>.size { float: right; font-weight: normal; }
 <header>
   <h2><a href="https://github.com/terser/terser">Terser</a>-online (ES6 minifier)</h2>
   <label>packing method: <select id=packmethod onchange="document.querySelectorAll('section.pack').forEach(s => s.hidden = s.id !== this.value); output.oninput()">
-    <option value=>None</option>
+    <option value="">None</option>
     <option value=regpack>Regpack (JS)</option>
     <option value=zopfli>Zopfli (DEFLATE)</option>
   </select></label>
@@ -236,9 +236,20 @@ async function dozopfli(input, signal) {
     zopflisize.textContent = 'in progress';
     zopflidownload.disabled = true;
 
+    let inflatedbuf;
+    let zpng = false;
     let bootstrap;
     if (opt.format === 'zpng') {
-      input += "\0"; // bootstrap expects a trailing null byte
+      if (input.indexOf("\0") >= 0) {
+        throw 'zpng input cannot contain a null byte';
+      }
+      if (!input.match(/^[\x01-\xff]*$/)) {
+        throw 'zpng input cannot contain any Unicode character beyond U+00FF';
+      }
+
+      // bootstrap expects a trailing null byte
+      inflatedbuf = Uint8Array.from([...input + "\0"], c => c.charCodeAt());
+      zpng = true;
 
       opt.zpng = opt.zpng || {};
       const allowedIds = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ$_';
@@ -279,14 +290,14 @@ async function dozopfli(input, signal) {
         bootstrap += `with(${canvasId}.getContext\`2d\`)`;
       }
       bootstrap += `for(${codeSizeId}=${codeId}='';${contextDot}drawImage(this,${codeSizeId}--,0),${tempId}=${contextDot}getImageData(0,0,1,1).data[0];)${codeId}+=String.fromCharCode(${tempId});(${evalId}=eval)(_)>`;
+    } else {
+      inflatedbuf = ensureByteBuffer(input);
     }
-
-    const inflatedbuf = ensureByteBuffer(input);
 
     console.time('compress');
     let deflatedbuf;
     let width, height;
-    if (opt.format === 'zpng') {
+    if (zpng) {
       ({ width, height, compressed: deflatedbuf } = await callworker(['compressIDAT', inflatedbuf, opt], signal));
     } else {
       deflatedbuf = await callworker(['compress', inflatedbuf, compressformat, opt], signal);
@@ -310,12 +321,12 @@ async function dozopfli(input, signal) {
     console.time('mapCompress');
     const thermalMap = [];
     const escaped = { 0x20: '&nbsp;', 0x26: '&amp;', 0x3c: '&lt;', 0x3e: '&gt;' };
-    let i = (opt.format === 'zpng' ? -1 : 0);
+    let i = (zpng ? -1 : 0);
     for (const [blockOverhead, ...block] of mapZopfli(compressformat, deflatedbuf)) {
       for (const [nbits, data] of block) {
         thermalMap.push(`<span class="thermal${nbits / data.length | 0}">`);
         let realData;
-        if (opt.format === 'zpng') { // reverse PNG filters if any
+        if (zpng) { // reverse PNG filters if any
           if (i < 0) {
             realData = data.slice(0, -i);
             realData.push(...inflatedbuf.slice(0, data.length + i));
@@ -325,7 +336,7 @@ async function dozopfli(input, signal) {
           i += data.length;
         }
         for (const c of realData || data) {
-          if (c < 0x20 || c > 0x7e) {
+          if ((c < 0x20 || c > 0x7e) && (!zpng || c < 0xa1)) {
             thermalMap.push(`<tt>${c.toString(16).toUpperCase().padStart(2, '0')}</tt>`);
           } else {
             thermalMap.push(escaped[c] || String.fromCharCode(c));
@@ -341,7 +352,7 @@ async function dozopfli(input, signal) {
       zopflisize.textContent = 'in progress';
     } else {
       zopflisize.textContent = '';
-      zopfliout.textContent = "// error\n" + e.toString();
+      zopfliout.textContent = zopflimap.textContent = "// error\n" + e.toString();
       throw e;
     }
   }
@@ -401,7 +412,7 @@ async function doregpack(input, signal) {
     if (bestStage > 0) thermalMapping.push(...bestOutput.result[bestStage-1][3]);
     regpackmap.innerHTML = thermalViewer.render(input, thermalMapping).innerHTML;
   } catch (e) {
-    regpackout.textContent = "// error\n" + e.toString();
+    regpackout.textContent = regpackmap.textContent = "// error\n" + e.toString();
     regpacksize.textContent = '';
     throw e;
   }
