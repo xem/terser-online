@@ -119,6 +119,15 @@ h3>.size { float: right; font-weight: normal; }
   zip: {
     filename: "a.js",
   },
+
+  zpng: {
+    // you can fix following variable names (should be a single letter) if needed
+    canvasId: null,
+    context2dId: null,
+    evalId: null,
+    codeId: null,
+    codeSizeId: null, // not exactly code size, but should be close
+  },
 }</textarea>
   <textarea id=zopfliout readonly></textarea>
   <div class=output id=zopflimap hidden></div>
@@ -227,8 +236,49 @@ async function dozopfli(input, signal) {
     zopflisize.textContent = 'in progress';
     zopflidownload.disabled = true;
 
+    let bootstrap;
     if (opt.format === 'zpng') {
       input += "\0"; // bootstrap expects a trailing null byte
+
+      opt.zpng = opt.zpng || {};
+      const allowedIds = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ$_';
+      const usedIds = {};
+      for (const key of ['canvasId', 'context2dId', 'evalId', 'codeId', 'codeSizeId']) {
+        const id = opt.zpng[key];
+        if (!id) continue;
+        if (typeof id !== 'string' || id.length !== 1 || allowedIds.indexOf(id) < 0) {
+          throw `invalid setting: zpng.${key} should be a valid one-length identifier`;
+        }
+        if (usedIds[id]) {
+          throw `invalid setting: zpng.${key} is same to zpng.${usedIds[id]}`;
+        }
+        usedIds[id] = key;
+      }
+
+      let { canvasId, context2dId, evalId, codeId, codeSizeId } = opt.zpng;
+      const pickUntaken = preferred => {
+        for (const id of preferred + allowedIds) {
+          if (usedIds[id]) continue;
+          usedIds[id] = true;
+          return id;
+        }
+        throw 'bug: cannot find untaken identifier from zpng bootstrap';
+      };
+      canvasId = canvasId || pickUntaken('VCc');
+      evalId = evalId || pickUntaken('eE');
+      codeId = codeId || pickUntaken('_cC');
+      codeSizeId = codeSizeId || pickUntaken('$i');
+      const tempId = pickUntaken('X');
+
+      let contextDot = '';
+      bootstrap = `<canvas id=${canvasId}><img src=# onload=`;
+      if (context2dId) {
+        bootstrap += `${context2dId}=${canvasId}.getContext\`2d\`;`;
+        contextDot = context2dId + '.';
+      } else {
+        bootstrap += `with(${canvasId}.getContext\`2d\`)`;
+      }
+      bootstrap += `for(${codeSizeId}=${codeId}='';${contextDot}drawImage(this,${codeSizeId}--,0),${tempId}=${contextDot}getImageData(0,0,1,1).data[0];)${codeId}+=String.fromCharCode(${tempId});(${evalId}=eval)(_)>`;
     }
 
     const inflatedbuf = ensureByteBuffer(input);
@@ -247,8 +297,6 @@ async function dozopfli(input, signal) {
     if (opt.format === 'zip') {
       outbuf = makeZip(opt.zip.filename, inflatedbuf, deflatedbuf);
     } else if (opt.format === 'zpng') {
-      // TODO make this bootstrap more customizable
-      const bootstrap = "<canvas id=V><img src=# onload=with(V.getContext`2d`)for($=_='';drawImage(this,$--,0),X=getImageData(0,0,1,1).data[0];)_+=String.fromCharCode(X);(e=eval)(_)>";
       outbuf = makePng(width, height, deflatedbuf, bootstrap);
     }
 
