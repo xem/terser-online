@@ -215,7 +215,7 @@ function doterser(input, extra, options) {
   if (extra){
     return result.code.length > 21 ? result.code.slice(0, -1).replace(/-- >/g, "-->").replace(/onload=function\(\){(var )?(.*)}/,"$2") : "";
   } else {
-    return byteLength > 1 ? result.code : "";
+    return packer.getByteLength(output.value) > 1 ? result.code : "";
   }
 }
 
