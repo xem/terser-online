@@ -61,7 +61,7 @@ function makeZip(filename, inflated, deflated) {
   const filenamebuf = ensureByteBuffer(filename);
   const filenamesz = two(filenamebuf.length);
   const centraldirsz = four(46 + filenamebuf.length);
-  const centraldiroff = four(76 + filenamebuf.length * 2 + deflated.length);
+  const centraldiroff = four(30 + filenamebuf.length + deflated.length);
 
   return Uint8Array.from([
     // local file header (30 bytes plus filename)
@@ -81,7 +81,7 @@ function makeZip(filename, inflated, deflated) {
     ...deflated,
 
     // central directory file header (46 bytes plus filename)
-    0x50, 0x4b, 0x01, 0x01, // signature
+    0x50, 0x4b, 0x01, 0x02, // signature
     0x1e, 0x00, // "version made by" (format 2.0, file made in MS-DOS :-)
     0x14, 0x00, // min version needed to extract
     0x00, 0x00, // general purpose bitflag
